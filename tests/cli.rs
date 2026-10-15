@@ -3,14 +3,18 @@
 //!
 //! `check` and `fix` are tested against the committed fake engine in
 //! `tests/fake-engine/`, which speaks the public Report contract. The real
-//! engine is proprietary and is never needed here.
+//! engine is proprietary and is never needed here. `collect` is tested
+//! against the committed fake analyzers in `tests/fake-tools/`.
 
 use std::ffi::OsStr;
 use std::fs;
 use std::path::Path;
 
 use serde_json::Value;
-use support::{FAKE_ENGINE, FAKE_ENGINE_DIR, frame, matches, run, run_engine, scratch, unframe};
+use support::{
+    FAKE_ENGINE, FAKE_ENGINE_DIR, checked_inputs, collect, collect_fixture, frame, matches, run,
+    run_engine, scratch, unframe,
+};
 
 /// Helpers shared by the tests below.
 #[cfg(test)]
@@ -43,6 +47,10 @@ mod support {
     pub(crate) const FAKE_ENGINE_DIR: &str =
         concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fake-engine");
 
+    /// Directory of the committed fake analyzers that report findings.
+    pub(crate) const FAKE_TOOLS: &str =
+        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fake-tools/findings");
+
     /// The committed fake engine.
     pub(crate) const FAKE_ENGINE: &str = concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -55,6 +63,40 @@ mod support {
         let _stale = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("scratch directory");
         dir
+    }
+
+    /// A repository using Go, Node, Python and Swift, with git history and
+    /// a local rules directory, so every non-coverage Tier-1 entry applies.
+    pub(crate) fn collect_fixture(name: &str) -> PathBuf {
+        let root = scratch(name);
+        for manifest in ["go.mod", "package.json", "pyproject.toml", "Package.swift"] {
+            fs::write(root.join(manifest), "").expect("manifest");
+        }
+        fs::create_dir_all(root.join(".git")).expect("git directory");
+        fs::create_dir_all(root.join(".sloptopop/rules")).expect("rules directory");
+        root
+    }
+
+    /// Runs `sloptopop` with only the fake analyzers on `PATH`.
+    pub(crate) fn collect(args: &[&str]) -> Output {
+        run_engine(args, None, OsStr::new(FAKE_TOOLS))
+    }
+
+    /// The report paths the fake engine's `check` read in `root`.
+    pub(crate) fn checked_inputs(root: &str) -> Vec<String> {
+        let check = run_engine(
+            &["check", root, "--format", "json"],
+            Some(OsStr::new(FAKE_ENGINE)),
+            OsStr::new(""),
+        );
+        assert_eq!(check.status.code(), Some(0), "check exit code");
+        let report: Value = serde_json::from_slice(&check.stdout).expect("Report");
+        report["analysis"]["inputs"]
+            .as_array()
+            .expect("inputs")
+            .iter()
+            .map(|input| input["path"].as_str().expect("path").to_owned())
+            .collect()
     }
 
     pub(crate) fn run(args: &[&str], stdin: &[u8]) -> Output {
@@ -313,4 +355,168 @@ fn missing_engine_exits_3_with_a_hint() {
         "{stderr}"
     );
     assert!(stderr.contains("SLOPTOPOP_ENGINE"), "hint");
+}
+
+/// Every entry that runs on the fixture, with the exit code its fake
+/// reports findings with and the report it writes.
+const RAN: [(&str, i64, &str); 14] = [
+    ("gitleaks", 0, "gitleaks.sarif"),
+    ("gitleaks-history", 0, "gitleaks.history.sarif"),
+    ("osv-scanner", 1, "osv-scanner.sarif"),
+    ("opengrep", 0, "opengrep.sarif"),
+    ("semgrep", 0, "semgrep.sarif"),
+    ("bandit", 1, "bandit.sarif"),
+    ("gosec", 1, "gosec.sarif"),
+    ("govulncheck", 3, "govulncheck.sarif"),
+    ("ruff", 1, "ruff.sarif"),
+    ("oxlint", 1, "oxlint.sarif"),
+    ("biome", 1, "biome.sarif"),
+    ("staticcheck", 1, "staticcheck.sarif"),
+    ("golangci-lint", 1, "golangci.sarif"),
+    ("swiftlint", 2, "swiftlint.sarif"),
+];
+
+#[test]
+fn collect_runs_installed_tools_and_check_reads_their_reports() {
+    let root = collect_fixture("collect-full");
+    let root_arg = root.to_str().expect("UTF-8 path");
+    let out = collect(&["collect", root_arg]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(out.status.code(), Some(0), "exit 0: {stdout}");
+    assert!(
+        stdout.starts_with(
+            "sloptopop collect: 14 ran, 0 failed, 0 missing, 2 skipped (ecosystems: go, node, python, swift)\n"
+        ),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("  ran      swiftlint        exit 2  .sloptopop/reports/swiftlint.sarif\n"),
+        "{stdout}"
+    );
+    let reports = root.join(".sloptopop/reports");
+    let record: Value =
+        serde_json::from_str(&fs::read_to_string(reports.join(".collect.json")).expect("record"))
+            .expect("record is JSON");
+    let tools = record["tools"].as_array().expect("tools");
+    assert_eq!(tools.len(), RAN.len() + 2, "{record:#}");
+    for ((name, code, file), tool) in RAN.iter().zip(tools) {
+        assert_eq!(tool["name"], *name, "order");
+        assert_eq!(tool["status"], "ran", "{name}");
+        assert_eq!(tool["exitCode"], *code, "{name}");
+        let command = tool["argv"][0].as_str().expect("argv");
+        assert_eq!(tool["version"], format!("{command} 1.0.0"), "{name}");
+        assert_eq!(
+            tool["output"],
+            format!(".sloptopop/reports/{file}"),
+            "{name}"
+        );
+        let report = fs::read_to_string(reports.join(file)).expect("report written");
+        assert!(
+            report.contains(&format!("\"name\":\"{command}\"")),
+            "{name}: {report}"
+        );
+    }
+    for (tool, name) in tools.iter().skip(RAN.len()).zip(["coverage.py", "c8"]) {
+        assert_eq!(
+            (&tool["name"], &tool["status"]),
+            (&Value::from(name), &Value::from("skipped")),
+            "{name}"
+        );
+    }
+    assert_eq!(
+        fs::read_to_string(reports.join(".gitignore")).expect("ignored"),
+        "*\n",
+        "reports ignored"
+    );
+    let calls = fs::read_to_string(root.join(".fake-calls")).expect("tools ran in the root");
+    assert!(
+        calls.contains("gitleaks git . --redact --report-format sarif --report-path .sloptopop/reports/gitleaks.history.sarif --exit-code 0\n"),
+        "{calls}"
+    );
+    let first = fs::read(reports.join(".collect.json")).expect("record");
+    let again = collect(&["collect", root_arg]);
+    assert_eq!(again.stdout, out.stdout, "same summary");
+    assert_eq!(
+        fs::read(reports.join(".collect.json")).expect("record"),
+        first,
+        "same record"
+    );
+    let inputs = checked_inputs(root_arg);
+    let mut expected: Vec<String> = RAN
+        .iter()
+        .map(|(_, _, file)| format!(".sloptopop/reports/{file}"))
+        .collect();
+    expected.sort();
+    assert_eq!(
+        inputs, expected,
+        "check reads every report and no hidden file"
+    );
+}
+
+#[test]
+fn collect_leaves_ignoring_to_the_root_gitignore() {
+    let root = collect_fixture("collect-ignored");
+    fs::write(root.join(".gitignore"), "/.sloptopop/\n").expect("gitignore");
+    let out = collect(&[
+        "collect",
+        root.to_str().expect("UTF-8"),
+        "--only",
+        "ruff,gitleaks",
+    ]);
+    assert_eq!(out.status.code(), Some(0), "exit 0");
+    assert!(
+        String::from_utf8_lossy(&out.stdout).starts_with("sloptopop collect: 2 ran, "),
+        "only the selected tools"
+    );
+    assert!(
+        !root.join(".sloptopop/reports/.gitignore").exists(),
+        "not created"
+    );
+}
+
+#[test]
+fn collect_dry_run_and_usage_errors() {
+    let root = collect_fixture("collect-dry");
+    let root_arg = root.to_str().expect("UTF-8");
+    let dry = collect(&["collect", root_arg, "--dry-run", "--only", "osv-scanner"]);
+    assert_eq!(dry.status.code(), Some(0), "exit 0");
+    assert_eq!(
+        String::from_utf8_lossy(&dry.stdout),
+        "sloptopop collect: dry run, nothing run (ecosystems: go, node, python, swift)\n  run      osv-scanner      osv-scanner scan source -r --offline-vulnerabilities --download-offline-databases --format sarif . > .sloptopop/reports/osv-scanner.sarif\n",
+        "plan"
+    );
+    assert!(!root.join(".sloptopop/reports").exists(), "nothing written");
+    for args in [
+        &["collect", root_arg, "--only", "nope"][..],
+        &["collect", root_arg, "--rules", "/nonexistent-rules"],
+        &["collect", "--bogus"],
+    ] {
+        let out = collect(args);
+        assert_eq!(out.status.code(), Some(2), "{args:?}");
+        assert!(out.stdout.is_empty(), "{args:?}");
+    }
+}
+
+#[test]
+fn collect_in_containers_runs_only_pinned_images() {
+    let root = collect_fixture("collect-container");
+    let out = collect(&["collect", root.to_str().expect("UTF-8"), "--container"]);
+    assert_eq!(out.status.code(), Some(0), "exit 0");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.starts_with("sloptopop collect: 0 ran, 0 failed, 0 missing, 16 skipped"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("  skipped  gitleaks         container image digest not pinned\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("  skipped  bandit           no container image catalogued\n"),
+        "{stdout}"
+    );
+    assert!(
+        !root.join(".fake-calls").exists(),
+        "the docker stub never ran"
+    );
 }

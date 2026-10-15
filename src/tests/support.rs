@@ -55,3 +55,11 @@ pub(crate) fn initialize(id: i64) -> Value {
         "params": { "clientName": "test", "clientVersion": "0", "protocolVersion": PROTOCOL_VERSION },
     })
 }
+
+/// Directory of the committed fake analyzers in `mode` (`findings`,
+/// `broken` or `killed`); see `tests/fake-tools/fake-tool`.
+pub(crate) fn fake_tools(mode: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fake-tools")
+        .join(mode)
+}

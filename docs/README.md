@@ -10,5 +10,6 @@ that language.
 | [Protocol](../PROTOCOL.md) | JSON-RPC 2.0 over stdio between the libraries and the `sloptopop` binary |
 | [Protocol schema](../schema/protocol.json) | Machine-readable description of every method and type |
 | [Conformance suite](../conformance/README.md) | Wire-level test cases every library must pass |
+| [`sloptopop collect`](collect.md) | Every analyzer `collect` runs: licence, fixed flags, output, and why |
 | [Report format](report-format.md) | The JSON produced by `sloptopop check --format json` |
 | [Quality standard](quality-standard.md) | The checks every open-source sloptopop repository passes before release |

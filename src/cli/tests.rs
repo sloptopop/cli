@@ -253,3 +253,30 @@ fn broken_stdout_during_check_exits_3() {
         "message"
     );
 }
+
+#[test]
+fn collect_is_dispatched_with_the_locator_path() {
+    let root = crate::tests::support::TempDir::new();
+    let locator = Locator {
+        path: Some(crate::tests::support::fake_tools("findings").into_os_string()),
+        ..Locator::default()
+    };
+    let root_arg = root.0.to_string_lossy().into_owned();
+    let dry = run_engine(&locator, &["collect", &root_arg, "--dry-run"]);
+    assert_eq!(dry.code, 0, "exit 0: {}", dry.stderr);
+    assert!(
+        dry.stdout
+            .contains("  run      gitleaks         gitleaks dir . --redact"),
+        "found on the locator's PATH: {}",
+        dry.stdout
+    );
+    let unknown = run_engine(&locator, &["collect", &root_arg, "--only", "nope"]);
+    assert_eq!(unknown.code, USAGE_ERROR, "unknown tool");
+    assert!(unknown.stdout.is_empty(), "nothing on stdout");
+    assert!(
+        unknown.stderr.starts_with("error: unknown tool: nope"),
+        "{}",
+        unknown.stderr
+    );
+    assert!(unknown.stderr.ends_with(USAGE), "usage");
+}

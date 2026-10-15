@@ -6,6 +6,7 @@ use std::io::{self, BufRead, Write};
 
 use crate::args::{Command, USAGE, parse};
 use crate::check_command::check;
+use crate::collect_command::collect;
 use crate::diagnostic::report;
 use crate::engine_locate::Locator;
 use crate::fix_command::fix;
@@ -17,7 +18,8 @@ use crate::server;
 pub const USAGE_ERROR: u8 = 2;
 
 /// Runs the CLI with explicit streams and returns the process exit code.
-/// `check` and `fix` look for the engine in this process's environment.
+/// `check` and `fix` look for the engine, and `collect` for the analyzers,
+/// in this process's environment.
 pub fn run(
     args: &[OsString],
     stdin: &mut dyn BufRead,
@@ -27,7 +29,8 @@ pub fn run(
     run_with(args, &Locator::from_process(), stdin, stdout, stderr)
 }
 
-/// [`run`], with the engine looked up through `locator`.
+/// [`run`], with the engine looked up through `locator`; `collect` looks
+/// for the analyzers on `locator.path`.
 pub fn run_with(
     args: &[OsString],
     locator: &Locator,
@@ -37,13 +40,15 @@ pub fn run_with(
 ) -> u8 {
     let command = match parse(args) {
         Ok(command) => command,
-        Err(message) => {
-            return report(stderr, &format!("error: {message}\n\n{USAGE}"), USAGE_ERROR);
-        }
+        Err(message) => return usage_error(stderr, &message),
     };
     let written = match command {
         Command::Check(path, format) => return check(locator, &path, format, stdout, stderr),
         Command::Fix(path, apply) => return fix(locator, &path, apply, stdout, stderr),
+        Command::Collect(options) => {
+            return collect(&options, locator.path.as_deref(), stdout, stderr)
+                .unwrap_or_else(|message| usage_error(stderr, &message));
+        }
         Command::Serve => {
             return match server::serve(stdin, stdout) {
                 Ok(code) => code,
@@ -58,6 +63,10 @@ pub fn run_with(
         Command::Help => stdout.write_all(USAGE.as_bytes()),
     };
     exit_code(&written.and_then(|()| stdout.flush()))
+}
+
+fn usage_error(stderr: &mut dyn Write, message: &str) -> u8 {
+    report(stderr, &format!("error: {message}\n\n{USAGE}"), USAGE_ERROR)
 }
 
 fn exit_code(result: &io::Result<()>) -> u8 {

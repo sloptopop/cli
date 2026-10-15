@@ -14,6 +14,10 @@ Commands:
   fix [path] [--apply]
                   Show the files that mechanical fixes would create;
                   --apply creates them (existing files are never touched)
+  collect [root] [--container] [--only <tool,...>] [--rules <dir>] [--dry-run]
+                  Run the installed analyzers with fixed flags and write
+                  their reports to .sloptopop/reports/ (see docs/collect.md);
+                  --dry-run prints the plan without running anything
   serve --stdio   Run the JSON-RPC server on stdin/stdout (used by the
                   language libraries)
   schema          Print the protocol description as JSON
@@ -37,13 +41,30 @@ pub(crate) enum Format {
     Json,
 }
 
+/// The options of `collect`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct CollectOptions {
+    /// The repository root (default: the current directory).
+    pub(crate) root: String,
+    /// Run each tool from its pinned container image instead of `PATH`.
+    pub(crate) container: bool,
+    /// Only these catalogue entries (empty: every applicable entry).
+    pub(crate) only: Vec<String>,
+    /// The local rules directory for Opengrep and Semgrep.
+    pub(crate) rules: Option<String>,
+    /// Print the plan without running anything.
+    pub(crate) dry_run: bool,
+}
+
 /// A parsed command line.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Command {
     /// `check [path] [--format text|json]`.
     Check(String, Format),
     /// `fix [path] [--apply]`.
     Fix(String, bool),
+    /// `collect [root] [--container] [--only <tool,...>] [--rules <dir>] [--dry-run]`.
+    Collect(CollectOptions),
     /// `serve --stdio`.
     Serve,
     /// `schema`.
@@ -64,6 +85,7 @@ pub(crate) fn parse(args: &[OsString]) -> Result<Command, String> {
     match args.as_slice() {
         ["check", rest @ ..] => parse_check(rest),
         ["fix", rest @ ..] => parse_fix(rest),
+        ["collect", rest @ ..] => parse_collect(rest),
         ["serve", "--stdio"] => Ok(Command::Serve),
         ["serve"] => Err("serve needs a transport: sloptopop serve --stdio".into()),
         ["schema"] => Ok(Command::Schema),
@@ -99,6 +121,39 @@ fn parse_fix(rest: &[&str]) -> Result<Command, String> {
         _ => return Err(format!("unrecognised arguments: fix {}", rest.join(" "))),
     };
     Ok(Command::Fix(checked_path(path)?, apply))
+}
+
+fn parse_collect(rest: &[&str]) -> Result<Command, String> {
+    let mut options = CollectOptions::default();
+    let mut root = None;
+    let mut rest = rest.iter();
+    while let Some(&arg) = rest.next() {
+        match arg {
+            "--container" => options.container = true,
+            "--dry-run" => options.dry_run = true,
+            "--only" => {
+                for name in value(arg, rest.next())?.split(',') {
+                    if name.is_empty() {
+                        return Err("--only has an empty tool name".into());
+                    }
+                    options.only.push(name.to_owned());
+                }
+            }
+            "--rules" => options.rules = Some(value(arg, rest.next())?.to_owned()),
+            path if root.is_none() => root = Some(checked_path(path)?),
+            _ => return Err(format!("unrecognised option or argument: {arg}")),
+        }
+    }
+    options.root = root.unwrap_or_else(|| ".".to_owned());
+    Ok(Command::Collect(options))
+}
+
+/// The value after `option`, which must be present and not an option.
+fn value<'a>(option: &str, next: Option<&&'a str>) -> Result<&'a str, String> {
+    match next {
+        Some(value) if !value.starts_with('-') => Ok(value),
+        _ => Err(format!("{option} needs a value")),
+    }
 }
 
 fn checked_path(path: &str) -> Result<String, String> {

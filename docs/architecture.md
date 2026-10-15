@@ -49,3 +49,14 @@ The engine is located in this order:
 Exit code 3 means the engine is missing (the message says how to install
 it), could not be started, failed, or printed something that is not
 JSON. Usage errors exit 2.
+
+## `collect`
+
+```
+sloptopop collect [root] [--container] [--only <tool,...>] [--rules <dir>] [--dry-run]
+```
+
+The engine never runs an analyzer. `collect` runs the installed ones from
+a checked-in catalogue with fixed flags, as separate processes, and writes
+their SARIF reports to `.sloptopop/reports/`, which `check` hands to the
+engine to read. See [collect.md](collect.md).

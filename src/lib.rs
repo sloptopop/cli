@@ -8,24 +8,41 @@
 //! `sloptopop-engine` binary as a child process and exchange the Report
 //! JSON with it (see `docs/report-format.md`); this crate never links it.
 //!
+//! `sloptopop collect` runs the installed analyzers from a checked-in
+//! catalogue with fixed flags, each as a separate process, and writes their
+//! reports to `.sloptopop/reports/` for the engine to read (see
+//! `docs/collect.md`).
+//!
 //! # Module layers
 //!
 //! A module imports only from modules in strictly lower layers; modules in
 //! the same layer know nothing of each other. Bottom to top:
 //!
-//! 0. `args`, `diagnostic`, `engine_locate`, `framing`, `handshake`,
-//!    `json_fields`, `jsonrpc` (no crate imports)
-//! 1. `engine_run`, `render_fix`, `render_report`, `schema`, `session`
-//! 2. `command_io`, `server`
-//! 3. `check_command`, `fix_command`
-//! 4. `cli`
-//! 5. this file: declares the modules and re-exports the public API
+//! 0. `args`, `collect_detect`, `collect_gitignore`, `collect_lookup`,
+//!    `diagnostic`, `engine_locate`, `framing`, `handshake`, `json_fields`,
+//!    `jsonrpc` (no crate imports)
+//! 1. `collect_catalogue`, `engine_run`, `render_fix`, `render_report`,
+//!    `schema`, `session`
+//! 2. `collect_plan`, `command_io`, `server`
+//! 3. `check_command`, `collect_run`, `fix_command`
+//! 4. `collect_record`
+//! 5. `collect_command`
+//! 6. `cli`
+//! 7. this file: declares the modules and re-exports the public API
 //!    (`engine`, `protocol` and `render` gather items from the layers
 //!    below; `cli`, `framing`, `schema` and `server` are public as they are).
 
 mod args;
 mod check_command;
 pub mod cli;
+mod collect_catalogue;
+mod collect_command;
+mod collect_detect;
+mod collect_gitignore;
+mod collect_lookup;
+mod collect_plan;
+mod collect_record;
+mod collect_run;
 mod command_io;
 mod diagnostic;
 mod engine_locate;

@@ -13,6 +13,10 @@
 #   garbage  text that is not JSON (exit 0)
 #   broken   an error on stderr and exit 3 (an engine failure)
 #   killed   dies from a signal
+#   a directory holding .sloptopop/reports/: a passing Report (exit 0)
+#            whose analysis.inputs lists the visible files there, as
+#            the engine reads what `sloptopop collect` wrote (hidden
+#            files such as .collect.json are not reports)
 #   anything else: a usage error (exit 2)
 # Every call first echoes its arguments to stderr, so tests can check what
 # the cli passed.
@@ -20,6 +24,20 @@ echo "fake-engine: $*" >&2
 command=$1
 mode=$2
 apply=$3
+if [ "$command" = check ] && [ -d "$mode/.sloptopop/reports" ]; then
+    inputs=
+    for report in "$mode"/.sloptopop/reports/*; do
+        [ -f "$report" ] || continue
+        name=${report##*/}
+        case $name in
+            *.sarif) input='{"path":".sloptopop/reports/'"$name"'","format":"sarif","outcome":"read","tools":[]}' ;;
+            *) input='{"path":".sloptopop/reports/'"$name"'","outcome":"unrecognised","tools":[]}' ;;
+        esac
+        inputs=$inputs${inputs:+,}$input
+    done
+    printf '%s\n' '{"schemaVersion":1,"tool":{"name":"sloptopop","version":"0.0.0-fake"},"root":".","ecosystems":[],"findings":[],"controls":[],"passed":true,"analysis":{"inputs":['"$inputs"'],"observations":{"error":0,"warning":0,"note":0,"none":0,"suppressed":0},"coverage":{"files":0,"covered":0,"total":0}}}'
+    exit 0
+fi
 case "$command/$mode" in
     check/pass)
         printf '%s\n' '{"schemaVersion":1,"tool":{"name":"sloptopop","version":"0.0.0-fake"},"root":".","ecosystems":[],"findings":[],"controls":[{"id":"STD-1","title":"Pinned toolchain","status":"pass"}],"passed":true,"analysis":{"inputs":[],"observations":{"error":0,"warning":0,"note":0,"none":0,"suppressed":0},"coverage":{"files":0,"covered":0,"total":0}}}'
