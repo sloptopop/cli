@@ -8,11 +8,12 @@ use std::io::Write;
 use std::path::{Path, PathBuf, absolute};
 
 use crate::args::CollectOptions;
-use crate::collect_catalogue::{CATALOGUE, REPORTS_DIR};
+use crate::collect_catalogue::{CATALOGUE, Kind, REPORTS_DIR};
 use crate::collect_detect::detect;
 use crate::collect_gitignore::ensure_ignored;
+use crate::collect_managed::TOOLS_DIR;
 use crate::collect_pack::{self, PACK_DIR};
-use crate::collect_plan::{RuleDirs, Settings, plan};
+use crate::collect_plan::{Planned, RuleDirs, Settings, plan};
 use crate::collect_record::{RECORD_FILE, record, summary};
 use crate::collect_run::run;
 use crate::diagnostic::report;
@@ -82,13 +83,16 @@ pub(crate) fn collect(
         ));
     }
     let reports = root.join(REPORTS_DIR);
-    if let Err(e) = fs::create_dir_all(&reports).and_then(|()| ensure_ignored(&root, &reports)) {
+    if let Err(e) = fs::create_dir_all(&reports).and_then(|()| ensure_ignored(&root, "reports")) {
         return Ok(failure(stderr, &reports, &e));
     }
     if given.is_none()
         && let Err(e) = collect_pack::write(&pack)
     {
         return Ok(failure(stderr, &pack, &e));
+    }
+    if let Err((dir, e)) = write_managed(&root, &planned) {
+        return Ok(failure(stderr, &dir, &e));
     }
     let outcomes: Vec<_> = planned.into_iter().map(|entry| run(entry, &root)).collect();
     let record_path = reports.join(RECORD_FILE);
@@ -99,6 +103,31 @@ pub(crate) fn collect(
         return Ok(failure(stderr, &record_path, &e));
     }
     Ok(print(stdout, stderr, &summary(&ecosystems, &outcomes)))
+}
+
+/// Writes the files of every managed tool among `planned` to its directory
+/// in [`TOOLS_DIR`] and makes sure git ignores that directory. The error
+/// names the directory that could not be written.
+fn write_managed(root: &Path, planned: &[Planned<'_>]) -> Result<(), (PathBuf, std::io::Error)> {
+    let mut tools: Vec<_> = planned
+        .iter()
+        .filter_map(|entry| {
+            if let Kind::Managed(managed) = entry.tool.kind {
+                Some(managed)
+            } else {
+                None
+            }
+        })
+        .collect();
+    // Catalogue order keeps the entries of one managed tool together.
+    tools.dedup();
+    let dir = root.join(TOOLS_DIR);
+    tools.into_iter().try_for_each(|managed| {
+        managed
+            .write(&dir)
+            .and_then(|()| ensure_ignored(root, "tools"))
+            .map_err(|e| (dir.join(managed.dir()), e))
+    })
 }
 
 /// `path` as an absolute path, if it names a directory.

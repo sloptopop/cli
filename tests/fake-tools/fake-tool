@@ -13,7 +13,10 @@
 # Every call first appends "<stub> <arguments>" to .fake-calls in the
 # working directory, so tests can check the argv and the directory.
 # A docker stub then acts as the tool named by --entrypoint, with the
-# arguments after the image (the one holding "@sha256:").
+# arguments after the image (the one holding "@sha256:"). A node stub drops
+# its first argument, the script (ESLint's), and acts as node. A dotnet
+# stub writes its report where the generated props would send it,
+# .sloptopop/reports/sonaranalyzer-csharp.Fake.sarif.
 # Only shell builtins are used, so PATH may hold nothing but the stubs.
 name=${0##*/}
 mode=${0%/*}
@@ -27,6 +30,9 @@ if [ "$name" = docker ]; then
         esac
         shift
     done
+fi
+if [ "$name" = node ] && [ "$#" -gt 0 ]; then
+    shift
 fi
 if [ "${1:-}" = --version ]; then
     if [ "$mode" = broken ]; then
@@ -55,6 +61,9 @@ for arg in "$@"; do
     esac
     previous=$arg
 done
+if [ "$name" = dotnet ]; then
+    out=.sloptopop/reports/sonaranalyzer-csharp.Fake.sarif
+fi
 report='{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"'"$name"'"}},"results":[]}]}'
 if [ -n "$out" ]; then
     printf '%s\n' "$report" > "$out"
@@ -62,7 +71,7 @@ else
     printf '%s\n' "$report"
 fi
 case $name in
-    osv-scanner|bandit|gosec|ruff|oxlint|biome|staticcheck|golangci-lint) exit 1 ;;
+    osv-scanner|bandit|gosec|ruff|oxlint|biome|staticcheck|golangci-lint|node) exit 1 ;;
     swiftlint) exit 2 ;;
     govulncheck) exit 3 ;;
 esac

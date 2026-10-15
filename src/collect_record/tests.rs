@@ -6,6 +6,7 @@ use serde_json::json;
 
 use super::*;
 use crate::collect_catalogue::{CATALOGUE, Tool};
+use crate::tests::support::inputs;
 
 fn named(name: &str) -> &'static Tool {
     CATALOGUE.iter().find(|tool| tool.name == name).unwrap()
@@ -14,7 +15,7 @@ fn named(name: &str) -> &'static Tool {
 fn outcomes() -> Vec<Outcome<'static>> {
     let outcome = |name, version: Option<&str>, status| Outcome {
         tool: named(name),
-        argv: named(name).argv(&[]),
+        argv: named(name).argv(&inputs(&[])),
         version: version.map(str::to_owned),
         status,
     };
@@ -55,7 +56,8 @@ fn the_record_lists_every_tool_in_order() {
     let text = record(false, &ecosystems, &outcomes());
     assert!(text.ends_with("}\n"), "final newline");
     let parsed: Value = serde_json::from_str(&text).unwrap();
-    let argv = |name| named(name).argv(&[]);
+    let argv = |name| named(name).argv(&inputs(&[]));
+    let files = |name| named(name).licence_files.to_vec();
     assert_eq!(
         parsed,
         json!({
@@ -63,18 +65,18 @@ fn the_record_lists_every_tool_in_order() {
             "mode": "host",
             "ecosystems": ["go", "python"],
             "tools": [
-                { "name": "gitleaks", "licence": "MIT", "version": "8.0.0", "argv": argv("gitleaks"),
+                { "name": "gitleaks", "licence": "MIT", "licenceFiles": files("gitleaks"), "version": "8.0.0", "argv": argv("gitleaks"),
                   "output": ".sloptopop/reports/gitleaks.sarif", "status": "ran", "exitCode": 0 },
-                { "name": "ruff", "licence": "MIT", "argv": argv("ruff"),
+                { "name": "ruff", "licence": "MIT", "licenceFiles": files("ruff"), "argv": argv("ruff"),
                   "output": ".sloptopop/reports/ruff.sarif", "status": "failed", "exitCode": 2,
                   "reason": "bad config" },
-                { "name": "staticcheck", "licence": "MIT", "version": "2025.1", "argv": argv("staticcheck"),
+                { "name": "staticcheck", "licence": "MIT", "licenceFiles": files("staticcheck"), "version": "2025.1", "argv": argv("staticcheck"),
                   "output": ".sloptopop/reports/staticcheck.sarif", "status": "failed",
                   "reason": "signal: 9" },
-                { "name": "bandit", "licence": "Apache-2.0", "argv": argv("bandit"),
+                { "name": "bandit", "licence": "Apache-2.0", "licenceFiles": files("bandit"), "argv": argv("bandit"),
                   "output": ".sloptopop/reports/bandit.sarif", "status": "missing",
                   "reason": "not found on PATH" },
-                { "name": "semgrep", "licence": "LGPL-2.1-only", "argv": argv("semgrep"),
+                { "name": "semgrep", "licence": "LGPL-2.1-only", "licenceFiles": files("semgrep"), "argv": argv("semgrep"),
                   "output": ".sloptopop/reports/semgrep.sarif", "status": "skipped",
                   "reason": "not a git repository" },
             ],

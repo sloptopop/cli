@@ -16,7 +16,7 @@ fn root_patterns_that_ignore_the_directory() {
         "target\n.sloptopop\n",
         "!.sloptopop\n.sloptopop/",
     ] {
-        assert!(ignores_sloptopop(text), "{text:?}");
+        assert!(ignores_sloptopop(text, "reports"), "{text:?}");
     }
     for text in [
         "",
@@ -28,8 +28,27 @@ fn root_patterns_that_ignore_the_directory() {
         ".sloptopop\n!.sloptopop/",
         "!.sloptopop",
     ] {
-        assert!(!ignores_sloptopop(text), "{text:?}");
+        assert!(!ignores_sloptopop(text, "reports"), "{text:?}");
     }
+    assert!(ignores_sloptopop(".sloptopop/tools/", "tools"), "tools");
+    assert!(
+        !ignores_sloptopop(".sloptopop/reports/", "tools"),
+        "reports only"
+    );
+}
+
+#[test]
+fn any_subdirectory_can_be_ignored() {
+    let root = TempDir::new();
+    let tools = root.0.join(".sloptopop/tools");
+    fs::create_dir_all(&tools).unwrap();
+    fs::write(root.0.join(".gitignore"), ".sloptopop/reports/\n").unwrap();
+    ensure_ignored(&root.0, "tools").unwrap();
+    assert_eq!(
+        fs::read_to_string(tools.join(".gitignore")).unwrap(),
+        "*\n",
+        "the reports rule does not cover the tools"
+    );
 }
 
 fn reports(root: &TempDir) -> std::path::PathBuf {
@@ -43,26 +62,26 @@ fn a_star_gitignore_is_created_or_completed() {
     let root = TempDir::new();
     let reports = reports(&root);
     let path = reports.join(".gitignore");
-    ensure_ignored(&root.0, &reports).unwrap();
+    ensure_ignored(&root.0, "reports").unwrap();
     assert_eq!(fs::read_to_string(&path).unwrap(), "*\n", "created");
-    ensure_ignored(&root.0, &reports).unwrap();
+    ensure_ignored(&root.0, "reports").unwrap();
     assert_eq!(fs::read_to_string(&path).unwrap(), "*\n", "unchanged");
     fs::write(&path, "!keep.txt").unwrap();
-    ensure_ignored(&root.0, &reports).unwrap();
+    ensure_ignored(&root.0, "reports").unwrap();
     assert_eq!(
         fs::read_to_string(&path).unwrap(),
         "!keep.txt\n*\n",
         "completed after a line without a newline"
     );
     fs::write(&path, "# local\n").unwrap();
-    ensure_ignored(&root.0, &reports).unwrap();
+    ensure_ignored(&root.0, "reports").unwrap();
     assert_eq!(
         fs::read_to_string(&path).unwrap(),
         "# local\n*\n",
         "appended"
     );
     fs::write(&path, " * \n").unwrap();
-    ensure_ignored(&root.0, &reports).unwrap();
+    ensure_ignored(&root.0, "reports").unwrap();
     assert_eq!(fs::read_to_string(&path).unwrap(), " * \n", "already there");
 }
 
@@ -71,7 +90,7 @@ fn nothing_is_written_when_the_root_ignores_sloptopop() {
     let root = TempDir::new();
     let reports = reports(&root);
     fs::write(root.0.join(".gitignore"), "/.sloptopop/\n").unwrap();
-    ensure_ignored(&root.0, &reports).unwrap();
+    ensure_ignored(&root.0, "reports").unwrap();
     assert!(!reports.join(".gitignore").exists(), "not created");
 }
 
@@ -80,7 +99,7 @@ fn unreadable_gitignore_is_an_error() {
     let root = TempDir::new();
     let reports = reports(&root);
     fs::create_dir(reports.join(".gitignore")).unwrap();
-    assert!(ensure_ignored(&root.0, &reports).is_err(), "a directory");
+    assert!(ensure_ignored(&root.0, "reports").is_err(), "a directory");
 }
 
 #[test]
@@ -88,7 +107,7 @@ fn an_unreadable_gitignore_is_never_overwritten() {
     let root = TempDir::new();
     let reports = reports(&root);
     fs::write(reports.join(".gitignore"), [0xff, b'\n']).unwrap();
-    assert!(ensure_ignored(&root.0, &reports).is_err(), "not UTF-8");
+    assert!(ensure_ignored(&root.0, "reports").is_err(), "not UTF-8");
     assert_eq!(
         fs::read(reports.join(".gitignore")).unwrap(),
         [0xff, b'\n'],

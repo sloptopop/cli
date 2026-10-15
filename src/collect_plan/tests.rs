@@ -4,7 +4,7 @@ use std::ffi::OsString;
 
 use super::*;
 use crate::collect_catalogue::{Arg, CATALOGUE, Image, Scope};
-use crate::tests::support::{TempDir, fake_tools};
+use crate::tests::support::{TempDir, fake_tools, install_managed};
 
 const DIGEST: &str = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
@@ -12,6 +12,7 @@ const BOXED: Tool = Tool {
     name: "boxed",
     command: "gosec",
     licence: "MIT",
+    licence_files: &[],
     scope: Scope::CrossCutting,
     kind: Kind::Run,
     args: &[Arg::Fixed("-out"), Arg::Output(""), Arg::Fixed("./...")],
@@ -404,5 +405,79 @@ fn containers_need_a_pinned_image_and_docker() {
         planned.argv.first().map(String::as_str),
         Some("docker"),
         "argv"
+    );
+}
+
+#[test]
+fn managed_tools_are_missing_until_installed_then_run() {
+    let mut fixture = Fixture::new();
+    fixture.ecosystems = BTreeSet::from([Ecosystem::Node, Ecosystem::Dotnet]);
+    let tools = fixture.root.0.join(".sloptopop/tools");
+    let script = tools
+        .join("eslint-sonarjs/node_modules/eslint/bin/eslint.js")
+        .to_string_lossy()
+        .into_owned();
+    let eslint = fixture.one(named("eslint-sonarjs"));
+    assert_eq!(
+        eslint.step,
+        Step::Missing(
+            "not installed in .sloptopop/tools/eslint-sonarjs: run \
+             `npm ci --ignore-scripts --prefix .sloptopop/tools/eslint-sonarjs`"
+                .to_owned()
+        ),
+        "npm"
+    );
+    assert_eq!(
+        eslint.argv[..3],
+        strings(&["node", &script, "--config"]),
+        "argv"
+    );
+    let props = format!(
+        "-p:DirectoryBuildPropsPath={}",
+        tools
+            .join("sonaranalyzer-csharp/Directory.Build.props")
+            .display()
+    );
+    let dotnet = fixture.one(named("sonaranalyzer-csharp"));
+    assert_eq!(
+        dotnet.step,
+        Step::Missing(
+            "not installed in .sloptopop/tools/sonaranalyzer-csharp: run \
+             `dotnet restore .sloptopop/tools/sonaranalyzer-csharp/fetch.proj`"
+                .to_owned()
+        ),
+        "NuGet"
+    );
+    assert_eq!(dotnet.argv.last(), Some(&props), "the generated props");
+    install_managed(&fixture.root.0);
+    assert_eq!(
+        fixture.one(named("eslint-sonarjs")).step,
+        Step::Run {
+            program: fake_tools("findings").join("node"),
+            version: strings(&[&script, "--version"]),
+            stdout: None,
+        },
+        "ESLint's version"
+    );
+    assert_eq!(
+        fixture.one(named("sonaranalyzer-csharp")).step,
+        Step::Run {
+            program: fake_tools("findings").join("dotnet"),
+            version: strings(&["--version"]),
+            stdout: None,
+        },
+        "the props name the reports"
+    );
+}
+
+#[test]
+fn managed_tools_have_no_container_image() {
+    let mut fixture = Fixture::new();
+    fixture.ecosystems = BTreeSet::from([Ecosystem::Node]);
+    fixture.container = true;
+    assert_eq!(
+        fixture.one(named("eslint-sonarjs-json")).step,
+        Step::Skipped("no container image catalogued".to_owned()),
+        "skipped before the installation is looked at"
     );
 }

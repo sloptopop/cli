@@ -1,0 +1,29 @@
+<!--
+  Downloads SonarAnalyzer.CSharp 9.32.0.97167 (LGPL-3.0-only, the last release
+  before the licence change) into packages/ next to this file:
+    dotnet restore .sloptopop/tools/sonaranalyzer-csharp/fetch.proj
+  NuGet verifies the package signature and writes the package's SHA-512 to
+  packages/sonaranalyzer.csharp/9.32.0.97167/sonaranalyzer.csharp.9.32.0.97167.nupkg.sha512,
+  which `sloptopop collect` compares with the pinned hash before it uses the
+  analyzer. Nothing is built, and the repository's own Directory.Build.* and
+  Directory.Packages.props files are not imported.
+  Written by sloptopop; MIT OR Apache-2.0, like the rest of the sloptopop CLI.
+-->
+<Project>
+  <PropertyGroup>
+    <ImportDirectoryBuildProps>false</ImportDirectoryBuildProps>
+    <ImportDirectoryBuildTargets>false</ImportDirectoryBuildTargets>
+    <ImportDirectoryPackagesProps>false</ImportDirectoryPackagesProps>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)obj/</BaseIntermediateOutputPath>
+  </PropertyGroup>
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+    <RestorePackagesPath>$(MSBuildThisFileDirectory)packages</RestorePackagesPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageDownload Include="SonarAnalyzer.CSharp" Version="[9.32.0.97167]" />
+  </ItemGroup>
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+</Project>

@@ -65,8 +65,20 @@ mod support {
         dir
     }
 
-    /// A repository using Go, Node, Python and Swift, with git history and
-    /// a local rules directory, so every non-coverage Tier-1 entry applies.
+    /// The npm packages of the eslint-sonarjs entries, at their pinned
+    /// versions.
+    const ESLINT_SONARJS: [(&str, &str); 5] = [
+        ("eslint-plugin-sonarjs", "2.0.4"),
+        ("eslint", "9.14.0"),
+        ("@microsoft/eslint-formatter-sarif", "3.1.0"),
+        ("@typescript-eslint/parser", "7.16.1"),
+        ("typescript", "5.5.4"),
+    ];
+
+    /// A repository using Go, Node, Python and Swift, with git history, a
+    /// local rules directory and the eslint-sonarjs packages installed (as
+    /// far as `collect` looks), so every non-coverage entry for those
+    /// ecosystems applies and runs.
     pub(crate) fn collect_fixture(name: &str) -> PathBuf {
         let root = scratch(name);
         for manifest in ["go.mod", "package.json", "pyproject.toml", "Package.swift"] {
@@ -74,6 +86,16 @@ mod support {
         }
         fs::create_dir_all(root.join(".git")).expect("git directory");
         fs::create_dir_all(root.join(".sloptopop/rules")).expect("rules directory");
+        let modules = root.join(".sloptopop/tools/eslint-sonarjs/node_modules");
+        for (package, version) in ESLINT_SONARJS {
+            let dir = modules.join(package);
+            fs::create_dir_all(&dir).expect("package directory");
+            fs::write(
+                dir.join("package.json"),
+                format!(r#"{{"version":"{version}"}}"#),
+            )
+            .expect("package manifest");
+        }
         root
     }
 
@@ -359,7 +381,7 @@ fn missing_engine_exits_3_with_a_hint() {
 
 /// Every entry that runs on the fixture, with the exit code its fake
 /// reports findings with and the report it writes.
-const RAN: [(&str, i64, &str); 14] = [
+const RAN: [(&str, i64, &str); 16] = [
     ("gitleaks", 0, "gitleaks.sarif"),
     ("gitleaks-history", 0, "gitleaks.history.sarif"),
     ("osv-scanner", 1, "osv-scanner.sarif"),
@@ -374,6 +396,8 @@ const RAN: [(&str, i64, &str); 14] = [
     ("staticcheck", 1, "staticcheck.sarif"),
     ("golangci-lint", 1, "golangci.sarif"),
     ("swiftlint", 2, "swiftlint.sarif"),
+    ("eslint-sonarjs", 1, "eslint-sonarjs.sarif"),
+    ("eslint-sonarjs-json", 1, "eslint-sonarjs.json"),
 ];
 
 #[test]
@@ -385,7 +409,7 @@ fn collect_runs_installed_tools_and_check_reads_their_reports() {
     assert_eq!(out.status.code(), Some(0), "exit 0: {stdout}");
     assert!(
         stdout.starts_with(
-            "sloptopop collect: 14 ran, 0 failed, 0 missing, 2 skipped (ecosystems: go, node, python, swift)\n"
+            "sloptopop collect: 16 ran, 0 failed, 0 missing, 2 skipped (ecosystems: go, node, python, swift)\n"
         ),
         "{stdout}"
     );
@@ -450,6 +474,38 @@ fn collect_runs_installed_tools_and_check_reads_their_reports() {
     assert_eq!(
         inputs, expected,
         "check reads every report and no hidden file"
+    );
+}
+
+#[test]
+fn collect_runs_eslint_sonarjs_from_the_managed_directory() {
+    let root = collect_fixture("collect-eslint");
+    let out = collect(&[
+        "collect",
+        root.to_str().expect("UTF-8"),
+        "--only",
+        "eslint-sonarjs-json",
+    ]);
+    assert_eq!(out.status.code(), Some(0), "exit 0");
+    let calls = fs::read_to_string(root.join(".fake-calls")).expect("ESLint ran");
+    let tools = root.join(".sloptopop/tools");
+    let eslint = tools.join("eslint-sonarjs");
+    assert!(
+        calls.contains(&format!(
+            "node {} --config {} --no-inline-config --no-error-on-unmatched-pattern --format json-with-metadata --output-file .sloptopop/reports/eslint-sonarjs.json .\n",
+            eslint.join("node_modules/eslint/bin/eslint.js").display(),
+            eslint.join("eslint.config.mjs").display()
+        )),
+        "{calls}"
+    );
+    assert!(
+        eslint.join("package-lock.json").is_file(),
+        "the lockfile for npm ci"
+    );
+    assert_eq!(
+        fs::read_to_string(tools.join(".gitignore")).expect("ignored"),
+        "*\n",
+        "tools ignored"
     );
 }
 
@@ -530,7 +586,7 @@ fn collect_in_containers_runs_only_pinned_images() {
     assert_eq!(out.status.code(), Some(0), "exit 0");
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
-        stdout.starts_with("sloptopop collect: 0 ran, 0 failed, 0 missing, 16 skipped"),
+        stdout.starts_with("sloptopop collect: 0 ran, 0 failed, 0 missing, 18 skipped"),
         "{stdout}"
     );
     assert!(

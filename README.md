@@ -13,6 +13,9 @@ installed (gitleaks, OSV-Scanner, Ruff, golangci-lint and more) with fixed,
 offline flags, each as a separate process; it never installs or bundles a
 tool. Opengrep and Semgrep run with sloptopop's own rule pack
 ([rules/](rules/README.md), MIT OR Apache-2.0), never with registry rules.
+eslint-plugin-sonarjs and SonarAnalyzer.CSharp, pinned to their last
+LGPL-3.0 releases, run from a sloptopop-managed directory
+(`.sloptopop/tools/`) once you install them there with one command.
 See [docs/collect.md](docs/collect.md) for every tool, licence and flag,
 and [docs/](docs/README.md) for the rest of the documentation.
 

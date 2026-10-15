@@ -5,14 +5,18 @@
 //!
 //! The flags are fixed so that output is complete (no caps on the number
 //! of issues), offline where the tool allows it, and stable from run to
-//! run. Copyleft tools (Opengrep, Semgrep, golangci-lint) are only ever
-//! started as separate processes; nothing here links or bundles a tool.
+//! run. Copyleft tools (Opengrep, Semgrep, golangci-lint, the LGPL Sonar
+//! analyzers) are only ever started as separate processes; nothing here
+//! links or bundles a tool. Every licence was read from the tool's licence
+//! file, whose address each entry records, never only from registry
+//! metadata.
 
 use std::collections::BTreeSet;
 
-use Arg::{Fixed, Output, ReportsDir, Rules};
+use Arg::{Eslint, Fixed, Output, ReportsDir, Rules, Tools};
 
 use crate::collect_detect::Ecosystem;
+use crate::collect_managed::Managed;
 
 /// The directory, relative to the repository root, that reports go to.
 pub(crate) const REPORTS_DIR: &str = ".sloptopop/reports";
@@ -29,6 +33,22 @@ pub(crate) enum Arg {
     /// The flag, then one rule directory, repeated for each directory
     /// (`--config <dir> --config <dir>`).
     Rules(&'static str),
+    /// After the prefix (first), the absolute path of this file (second)
+    /// in the managed tools directory.
+    Tools(&'static str, &'static str),
+    /// The `ESLint` command-line script (the project's or the managed one).
+    Eslint,
+}
+
+/// What an argument list is rendered with.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Inputs<'a> {
+    /// The rule directories, for [`Rules`].
+    pub(crate) rules: &'a [String],
+    /// The managed tools directory, for [`Tools`].
+    pub(crate) tools: &'a str,
+    /// The `ESLint` script, for [`Eslint`].
+    pub(crate) eslint: &'a str,
 }
 
 /// Where a tool's report goes.
@@ -38,6 +58,9 @@ pub(crate) enum Sink {
     PathArgument,
     /// The tool prints the report; `collect` writes stdout to the file.
     Stdout,
+    /// The files `collect` writes to the tool's managed directory name the
+    /// report files; the output names them with one `*`.
+    Config,
 }
 
 /// When an entry runs.
@@ -50,6 +73,9 @@ pub(crate) enum Kind {
     /// Never run: the command needs the project's own test run, so it is
     /// only documented.
     Documented,
+    /// Whenever it applies and its pinned packages are installed in its
+    /// managed directory.
+    Managed(Managed),
 }
 
 /// Which repositories an entry applies to.
@@ -99,15 +125,19 @@ pub(crate) struct Tool {
     pub(crate) name: &'static str,
     /// The executable.
     pub(crate) command: &'static str,
-    /// The tool's licence (SPDX expression).
+    /// The tool's licence (SPDX expression), as its licence files state.
     pub(crate) licence: &'static str,
+    /// The licence files read, at a released tag or in the released
+    /// archive.
+    pub(crate) licence_files: &'static [&'static str],
     /// Which repositories it applies to.
     pub(crate) scope: Scope,
     /// When it runs.
     pub(crate) kind: Kind,
     /// The arguments after the command.
     pub(crate) args: &'static [Arg],
-    /// The report's file name in [`REPORTS_DIR`].
+    /// The report's file name in [`REPORTS_DIR`]; with [`Sink::Config`] a
+    /// pattern with one `*`.
     pub(crate) output: &'static str,
     /// Where the report goes.
     pub(crate) sink: Sink,
@@ -138,23 +168,37 @@ impl Tool {
         self.args.iter().any(|arg| matches!(arg, Rules(_)))
     }
 
-    /// The command and its arguments, with `rules` as the rule
-    /// directories.
-    pub(crate) fn argv(&self, rules: &[String]) -> Vec<String> {
-        let output = self.output_path();
+    /// The command and its arguments.
+    pub(crate) fn argv(&self, inputs: &Inputs<'_>) -> Vec<String> {
         std::iter::once(self.command.to_owned())
-            .chain(self.args.iter().flat_map(|arg| {
-                match arg {
-                    Fixed(value) => vec![(*value).to_owned()],
-                    Output(prefix) => vec![format!("{prefix}{output}")],
-                    ReportsDir(prefix) => vec![format!("{prefix}{REPORTS_DIR}")],
-                    Rules(flag) => rules
-                        .iter()
-                        .flat_map(|dir| [(*flag).to_owned(), dir.clone()])
-                        .collect(),
-                }
-            }))
+            .chain(self.args.iter().flat_map(|arg| self.render(*arg, inputs)))
             .collect()
+    }
+
+    /// The arguments after the command that print the tool's version: the
+    /// script a [`Eslint`] entry starts with, then `--version`.
+    pub(crate) fn version_args(&self, inputs: &Inputs<'_>) -> Vec<String> {
+        self.args
+            .iter()
+            .take_while(|arg| matches!(arg, Eslint))
+            .flat_map(|arg| self.render(*arg, inputs))
+            .chain(std::iter::once("--version".to_owned()))
+            .collect()
+    }
+
+    fn render(&self, arg: Arg, inputs: &Inputs<'_>) -> Vec<String> {
+        match arg {
+            Fixed(value) => vec![value.to_owned()],
+            Output(prefix) => vec![format!("{prefix}{}", self.output_path())],
+            ReportsDir(prefix) => vec![format!("{prefix}{REPORTS_DIR}")],
+            Rules(flag) => inputs
+                .rules
+                .iter()
+                .flat_map(|dir| [flag.to_owned(), dir.clone()])
+                .collect(),
+            Tools(prefix, file) => vec![format!("{prefix}{}/{file}", inputs.tools)],
+            Eslint => vec![inputs.eslint.to_owned()],
+        }
     }
 }
 
@@ -169,6 +213,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         name: "gitleaks",
         command: "gitleaks",
         licence: "MIT",
+        licence_files: &["https://github.com/gitleaks/gitleaks/blob/v8.30.1/LICENSE"],
         scope: Scope::CrossCutting,
         kind: Kind::Run,
         args: &[
@@ -197,6 +242,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         name: "gitleaks-history",
         command: "gitleaks",
         licence: "MIT",
+        licence_files: &["https://github.com/gitleaks/gitleaks/blob/v8.30.1/LICENSE"],
         scope: Scope::CrossCutting,
         kind: Kind::NeedsGit,
         args: &[
@@ -225,6 +271,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         name: "osv-scanner",
         command: "osv-scanner",
         licence: "Apache-2.0",
+        licence_files: &["https://github.com/google/osv-scanner/blob/v2.7.0/LICENSE"],
         scope: Scope::CrossCutting,
         kind: Kind::Run,
         args: &[
@@ -253,6 +300,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         name: "opengrep",
         command: "opengrep",
         licence: "LGPL-2.1-only",
+        licence_files: &["https://github.com/opengrep/opengrep/blob/v1.31.0/LICENSE"],
         scope: Scope::CrossCutting,
         kind: Kind::Run,
         args: &[
@@ -273,6 +321,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         name: "semgrep",
         command: "semgrep",
         licence: "LGPL-2.1-only",
+        licence_files: &["https://github.com/semgrep/semgrep/blob/v1.181.0/LICENSE"],
         scope: Scope::CrossCutting,
         kind: Kind::Run,
         args: &[
@@ -299,6 +348,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         name: "bandit",
         command: "bandit",
         licence: "Apache-2.0",
+        licence_files: &["https://github.com/PyCQA/bandit/blob/1.9.4/LICENSE"],
         scope: Scope::Only(Ecosystem::Python),
         kind: Kind::Run,
         args: &[
@@ -320,6 +370,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         name: "gosec",
         command: "gosec",
         licence: "Apache-2.0",
+        licence_files: &["https://github.com/securego/gosec/blob/v2.29.0/LICENSE.txt"],
         scope: Scope::Only(Ecosystem::Go),
         kind: Kind::Run,
         args: &[
@@ -343,6 +394,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         name: "govulncheck",
         command: "govulncheck",
         licence: "BSD-3-Clause",
+        licence_files: &["https://github.com/golang/vuln/blob/v1.1.4/LICENSE"],
         scope: Scope::Only(Ecosystem::Go),
         kind: Kind::Run,
         args: &[Fixed("-format"), Fixed("sarif"), Fixed("./...")],
@@ -357,6 +409,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         name: "ruff",
         command: "ruff",
         licence: "MIT",
+        licence_files: &["https://github.com/astral-sh/ruff/blob/0.17.1/LICENSE"],
         scope: Scope::Only(Ecosystem::Python),
         kind: Kind::Run,
         args: &[
@@ -382,6 +435,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         name: "oxlint",
         command: "oxlint",
         licence: "MIT",
+        licence_files: &["https://github.com/oxc-project/oxc/blob/oxlint_v1.88.0/LICENSE"],
         scope: Scope::Only(Ecosystem::Node),
         kind: Kind::Run,
         args: &[Fixed("--format"), Fixed("sarif"), Fixed(".")],
@@ -396,6 +450,10 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         name: "biome",
         command: "biome",
         licence: "MIT OR Apache-2.0",
+        licence_files: &[
+            "https://github.com/biomejs/biome/blob/@biomejs/biome@2.5.15/LICENSE-MIT",
+            "https://github.com/biomejs/biome/blob/@biomejs/biome@2.5.15/LICENSE-APACHE",
+        ],
         scope: Scope::Only(Ecosystem::Node),
         kind: Kind::Run,
         args: &[Fixed("lint"), Fixed("--reporter=sarif"), Fixed(".")],
@@ -413,6 +471,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         name: "staticcheck",
         command: "staticcheck",
         licence: "MIT",
+        licence_files: &["https://github.com/dominikh/go-tools/blob/2026.2.2/LICENSE"],
         scope: Scope::Only(Ecosystem::Go),
         kind: Kind::Run,
         args: &[Fixed("-f"), Fixed("sarif"), Fixed("./...")],
@@ -427,6 +486,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         name: "golangci-lint",
         command: "golangci-lint",
         licence: "GPL-3.0-only",
+        licence_files: &["https://github.com/golangci/golangci-lint/blob/v2.14.0/LICENSE"],
         scope: Scope::Only(Ecosystem::Go),
         kind: Kind::Run,
         args: &[
@@ -451,6 +511,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         name: "swiftlint",
         command: "swiftlint",
         licence: "MIT",
+        licence_files: &["https://github.com/realm/SwiftLint/blob/0.65.1/LICENSE"],
         scope: Scope::Only(Ecosystem::Swift),
         kind: Kind::Run,
         args: &[
@@ -469,11 +530,109 @@ pub(crate) const CATALOGUE: &[Tool] = &[
             digest: None,
         }),
     },
+    // eslint-plugin-sonarjs 2.0.4 (LGPL-3.0-only, the last release before
+    // SonarSource's source-available licence) with its recommended rules,
+    // run by ESLint from the managed directory with sloptopop's own
+    // configuration (never the project's). Two runs, because ESLint writes
+    // one format per run: SARIF for the engine, and `json-with-metadata`,
+    // which keeps each finding's fix and suggestions.
+    Tool {
+        name: "eslint-sonarjs",
+        command: "node",
+        licence: "LGPL-3.0-only",
+        licence_files: &[
+            "https://registry.npmjs.org/eslint-plugin-sonarjs/-/eslint-plugin-sonarjs-2.0.4.tgz#package/LICENSE",
+        ],
+        scope: Scope::Only(Ecosystem::Node),
+        kind: Kind::Managed(Managed::EslintSonarjs),
+        args: &[
+            Eslint,
+            Fixed("--config"),
+            Tools("", "eslint-sonarjs/eslint.config.mjs"),
+            Fixed("--no-inline-config"),
+            Fixed("--no-error-on-unmatched-pattern"),
+            Fixed("--format"),
+            Tools(
+                "",
+                "eslint-sonarjs/node_modules/@microsoft/eslint-formatter-sarif/sarif.js",
+            ),
+            Fixed("--output-file"),
+            Output(""),
+            Fixed("."),
+        ],
+        output: "eslint-sonarjs.sarif",
+        sink: Sink::PathArgument,
+        findings: &[1],
+        network: Network::Offline,
+        image: None,
+    },
+    Tool {
+        name: "eslint-sonarjs-json",
+        command: "node",
+        licence: "LGPL-3.0-only",
+        licence_files: &[
+            "https://registry.npmjs.org/eslint-plugin-sonarjs/-/eslint-plugin-sonarjs-2.0.4.tgz#package/LICENSE",
+        ],
+        scope: Scope::Only(Ecosystem::Node),
+        kind: Kind::Managed(Managed::EslintSonarjs),
+        args: &[
+            Eslint,
+            Fixed("--config"),
+            Tools("", "eslint-sonarjs/eslint.config.mjs"),
+            Fixed("--no-inline-config"),
+            Fixed("--no-error-on-unmatched-pattern"),
+            Fixed("--format"),
+            Fixed("json-with-metadata"),
+            Fixed("--output-file"),
+            Output(""),
+            Fixed("."),
+        ],
+        output: "eslint-sonarjs.json",
+        sink: Sink::PathArgument,
+        findings: &[1],
+        network: Network::Offline,
+        image: None,
+    },
+    // SonarAnalyzer.CSharp 9.32.0.97167 (LGPL-3.0-only, the last release
+    // before the licence change) as Roslyn analyzers in the project's own
+    // build, added by a generated Directory.Build.props in the managed
+    // directory, so no project file changes. Each project's compiler
+    // writes its SARIF v2.1 log to the reports directory.
+    Tool {
+        name: "sonaranalyzer-csharp",
+        command: "dotnet",
+        licence: "LGPL-3.0-only",
+        licence_files: &[
+            "https://github.com/SonarSource/sonar-dotnet/blob/9.32.0.97167/LICENSE.txt",
+            "https://api.nuget.org/v3-flatcontainer/sonaranalyzer.csharp/9.32.0.97167/sonaranalyzer.csharp.9.32.0.97167.nupkg#SonarAnalyzer.CSharp.nuspec",
+        ],
+        scope: Scope::Only(Ecosystem::Dotnet),
+        kind: Kind::Managed(Managed::SonarCsharp),
+        args: &[
+            Fixed("build"),
+            Fixed("--no-restore"),
+            Fixed("--no-incremental"),
+            Fixed("-p:TreatWarningsAsErrors=false"),
+            Tools(
+                "-p:DirectoryBuildPropsPath=",
+                "sonaranalyzer-csharp/Directory.Build.props",
+            ),
+        ],
+        output: "sonaranalyzer-csharp.*.sarif",
+        sink: Sink::Config,
+        findings: &[],
+        network: Network::Offline,
+        image: None,
+    },
     // Coverage producers: documented only, never run.
     Tool {
         name: "cargo-llvm-cov",
         command: "cargo",
         licence: "Apache-2.0 OR MIT",
+        licence_files: &[
+            "https://github.com/taiki-e/cargo-llvm-cov/blob/v0.9.1/LICENSE-APACHE",
+            "https://github.com/taiki-e/cargo-llvm-cov/blob/v0.9.1/LICENSE-MIT",
+        ],
         scope: Scope::Only(Ecosystem::Rust),
         kind: Kind::Documented,
         args: &[
@@ -492,6 +651,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         name: "coverage.py",
         command: "coverage",
         licence: "Apache-2.0",
+        licence_files: &["https://github.com/nedbat/coveragepy/blob/7.16.2/LICENSE.txt"],
         scope: Scope::Only(Ecosystem::Python),
         kind: Kind::Documented,
         args: &[Fixed("lcov"), Fixed("-o"), Output("")],
@@ -505,6 +665,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         name: "c8",
         command: "c8",
         licence: "ISC",
+        licence_files: &["https://github.com/bcoe/c8/blob/v12.0.0/LICENSE.txt"],
         scope: Scope::Only(Ecosystem::Node),
         kind: Kind::Documented,
         args: &[
@@ -523,6 +684,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         name: "coverlet",
         command: "dotnet",
         licence: "MIT",
+        licence_files: &["https://github.com/coverlet-coverage/coverlet/blob/v10.1.0/LICENSE"],
         scope: Scope::Only(Ecosystem::Dotnet),
         kind: Kind::Documented,
         args: &[
@@ -541,6 +703,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         name: "gcovr",
         command: "gcovr",
         licence: "BSD-3-Clause",
+        licence_files: &["https://github.com/gcovr/gcovr/blob/8.6/LICENSE.txt"],
         scope: Scope::Only(Ecosystem::Cpp),
         kind: Kind::Documented,
         args: &[Fixed("--lcov"), Output("")],

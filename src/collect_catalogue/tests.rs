@@ -3,8 +3,12 @@
 use std::collections::HashSet;
 
 use super::*;
+use crate::collect_managed::Managed;
+use crate::tests::support::inputs;
 
-const LICENCES: [&str; 8] = [
+/// Every licence the catalogue may claim. A claim is only allowed with the
+/// licence files it was read from (`licence_files`), checked below.
+const LICENCES: [&str; 9] = [
     "MIT",
     "Apache-2.0",
     "BSD-3-Clause",
@@ -13,6 +17,7 @@ const LICENCES: [&str; 8] = [
     "Apache-2.0 OR MIT",
     "LGPL-2.1-only",
     "GPL-3.0-only",
+    "LGPL-3.0-only",
 ];
 
 fn entry(name: &str) -> &'static Tool {
@@ -23,7 +28,7 @@ fn entry(name: &str) -> &'static Tool {
 }
 
 fn has(tool: &Tool, flags: &[&str]) -> bool {
-    let argv = tool.argv(&["RULES".to_owned()]);
+    let argv = tool.argv(&inputs(&["RULES".to_owned()]));
     argv.windows(flags.len()).any(|window| window == flags)
 }
 
@@ -44,6 +49,9 @@ fn the_required_tier_one_tools_are_catalogued() {
         "staticcheck",
         "golangci-lint",
         "swiftlint",
+        "eslint-sonarjs",
+        "eslint-sonarjs-json",
+        "sonaranalyzer-csharp",
         "cargo-llvm-cov",
         "coverage.py",
         "c8",
@@ -70,6 +78,12 @@ fn names_and_outputs_are_unique_and_plain() {
             "{}: output must be a visible file name in the reports directory",
             tool.name
         );
+        assert_eq!(
+            tool.output.matches('*').count(),
+            usize::from(tool.sink == Sink::Config),
+            "{}: only a configured report is a pattern, with one *",
+            tool.name
+        );
         assert!(
             !tool.name.is_empty() && !tool.name.contains(',') && !tool.name.starts_with('-'),
             "{}: usable with --only",
@@ -91,6 +105,54 @@ fn every_entry_has_a_known_licence() {
 }
 
 #[test]
+fn every_licence_was_read_from_a_licence_file_at_a_release() {
+    for tool in CATALOGUE {
+        assert!(
+            !tool.licence_files.is_empty(),
+            "{}: no licence file",
+            tool.name
+        );
+        for file in tool.licence_files {
+            let name = file.rsplit(['/', '#']).next().unwrap_or_default();
+            assert!(
+                file.starts_with("https://") && !file.contains(char::is_whitespace),
+                "{}: {file}",
+                tool.name
+            );
+            assert!(
+                ["LICENSE", "LICENSE.txt", "LICENSE-MIT", "LICENSE-APACHE"].contains(&name)
+                    || name.ends_with(".nuspec"),
+                "{}: {file} is a licence file",
+                tool.name
+            );
+            assert!(
+                ["/main/", "/master/", "/HEAD/", "/develop/", "/latest/"]
+                    .iter()
+                    .all(|branch| !file.contains(branch)),
+                "{}: {file} is pinned to a release, not a branch",
+                tool.name
+            );
+        }
+    }
+}
+
+#[test]
+fn managed_entries_claim_the_licence_of_their_pinned_analyzer() {
+    for (name, managed) in [
+        ("eslint-sonarjs", Managed::EslintSonarjs),
+        ("eslint-sonarjs-json", Managed::EslintSonarjs),
+        ("sonaranalyzer-csharp", Managed::SonarCsharp),
+    ] {
+        let tool = entry(name);
+        let analyzer = managed.pins().first().unwrap();
+        assert_eq!(tool.kind, Kind::Managed(managed), "{name}");
+        assert_eq!(tool.licence, analyzer.licence, "{name}");
+        assert_eq!(tool.licence_files, analyzer.licence_files, "{name}");
+        assert_eq!(tool.image, None, "{name}: no container image");
+    }
+}
+
+#[test]
 fn flags_are_fixed_and_the_sink_matches_the_arguments() {
     for tool in CATALOGUE {
         let outputs = tool
@@ -100,7 +162,7 @@ fn flags_are_fixed_and_the_sink_matches_the_arguments() {
             .count();
         let expected = match tool.sink {
             Sink::PathArgument => 1,
-            Sink::Stdout => 0,
+            Sink::Stdout | Sink::Config => 0,
         };
         assert_eq!(outputs, expected, "{}: output argument", tool.name);
         assert_eq!(
@@ -220,11 +282,55 @@ fn security_relevant_flags_are_present() {
 }
 
 #[test]
+fn managed_tools_run_with_sloptopops_files_only() {
+    for (name, format) in [
+        (
+            "eslint-sonarjs",
+            "TOOLS/eslint-sonarjs/node_modules/@microsoft/eslint-formatter-sarif/sarif.js",
+        ),
+        ("eslint-sonarjs-json", "json-with-metadata"),
+    ] {
+        let tool = entry(name);
+        assert!(
+            has(
+                tool,
+                &[
+                    "node",
+                    "ESLINT",
+                    "--config",
+                    "TOOLS/eslint-sonarjs/eslint.config.mjs",
+                    "--no-inline-config",
+                    "--no-error-on-unmatched-pattern",
+                    "--format",
+                    format
+                ]
+            ),
+            "{name}: sloptopop's configuration only, offline"
+        );
+    }
+    assert!(
+        has(
+            entry("sonaranalyzer-csharp"),
+            &[
+                "dotnet",
+                "build",
+                "--no-restore",
+                "--no-incremental",
+                "-p:TreatWarningsAsErrors=false",
+                "-p:DirectoryBuildPropsPath=TOOLS/sonaranalyzer-csharp/Directory.Build.props"
+            ]
+        ),
+        "no download, every file compiled, the generated props"
+    );
+}
+
+#[test]
 fn argv_renders_every_argument_kind() {
     let tool = Tool {
         name: "t",
         command: "tool",
         licence: "MIT",
+        licence_files: &[],
         scope: Scope::CrossCutting,
         kind: Kind::Run,
         args: &[
@@ -233,6 +339,8 @@ fn argv_renders_every_argument_kind() {
             Output("--out="),
             ReportsDir("--dir="),
             Rules("--config"),
+            Tools("--props=", "t/p"),
+            Eslint,
         ],
         output: "t.sarif",
         sink: Sink::PathArgument,
@@ -241,7 +349,7 @@ fn argv_renders_every_argument_kind() {
         image: None,
     };
     assert_eq!(
-        tool.argv(&["/a".to_owned(), "/b".to_owned()]),
+        tool.argv(&inputs(&["/a".to_owned(), "/b".to_owned()])),
         [
             "tool",
             "-x",
@@ -251,9 +359,21 @@ fn argv_renders_every_argument_kind() {
             "--config",
             "/a",
             "--config",
-            "/b"
+            "/b",
+            "--props=TOOLS/t/p",
+            "ESLINT"
         ],
         "argv"
+    );
+    assert_eq!(
+        tool.version_args(&inputs(&[])),
+        ["--version"],
+        "the tool prints its version"
+    );
+    assert_eq!(
+        entry("eslint-sonarjs").version_args(&inputs(&[])),
+        ["ESLINT", "--version"],
+        "ESLint's script prints ESLint's version"
     );
     assert!(tool.takes_rules(), "takes rules");
     assert!(!entry("ruff").takes_rules(), "ruff takes none");

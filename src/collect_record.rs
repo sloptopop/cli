@@ -44,6 +44,10 @@ fn tool_record(outcome: &Outcome<'_>) -> Value {
     let mut tool = Map::new();
     tool.insert("name".to_owned(), outcome.tool.name.into());
     tool.insert("licence".to_owned(), outcome.tool.licence.into());
+    tool.insert(
+        "licenceFiles".to_owned(),
+        outcome.tool.licence_files.to_vec().into(),
+    );
     if let Some(version) = &outcome.version {
         tool.insert("version".to_owned(), version.as_str().into());
     }

@@ -6,9 +6,10 @@ use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use crate::collect_catalogue::{Kind, Network, REPORTS_DIR, Sink, Tool};
+use crate::collect_catalogue::{Inputs, Kind, Network, REPORTS_DIR, Sink, Tool};
 use crate::collect_detect::Ecosystem;
 use crate::collect_lookup::find;
+use crate::collect_managed::{TOOLS_DIR, eslint_script};
 
 /// Where the repository is mounted (read-only) inside a container.
 pub(crate) const CONTAINER_ROOT: &str = "/src";
@@ -85,17 +86,6 @@ pub(crate) struct Planned<'t> {
 /// Plans every entry of `catalogue` that applies and was selected, in
 /// catalogue order.
 pub(crate) fn plan<'t>(catalogue: &'t [Tool], settings: &Settings<'_>) -> Vec<Planned<'t>> {
-    catalogue
-        .iter()
-        .filter(|tool| tool.applies(settings.ecosystems))
-        .filter(|tool| {
-            settings.only.is_empty() || settings.only.iter().any(|name| name == tool.name)
-        })
-        .map(|tool| plan_one(tool, settings))
-        .collect()
-}
-
-fn plan_one<'t>(tool: &'t Tool, settings: &Settings<'_>) -> Planned<'t> {
     let rules: Vec<String> = settings
         .rules
         .iter()
@@ -108,7 +98,32 @@ fn plan_one<'t>(tool: &'t Tool, settings: &Settings<'_>) -> Planned<'t> {
             }
         })
         .collect();
-    let argv = tool.argv(&rules);
+    let tools = settings.root.join(TOOLS_DIR);
+    let tools_text = tools.to_string_lossy();
+    let eslint = eslint_script(settings.root);
+    let eslint_text = eslint.to_string_lossy();
+    let inputs = Inputs {
+        rules: &rules,
+        tools: &tools_text,
+        eslint: &eslint_text,
+    };
+    catalogue
+        .iter()
+        .filter(|tool| tool.applies(settings.ecosystems))
+        .filter(|tool| {
+            settings.only.is_empty() || settings.only.iter().any(|name| name == tool.name)
+        })
+        .map(|tool| plan_one(tool, settings, &inputs, &tools))
+        .collect()
+}
+
+fn plan_one<'t>(
+    tool: &'t Tool,
+    settings: &Settings<'_>,
+    inputs: &Inputs<'_>,
+    tools: &Path,
+) -> Planned<'t> {
+    let argv = tool.argv(inputs);
     let skipped = |reason: &str| Planned {
         tool,
         argv: argv.clone(),
@@ -117,17 +132,29 @@ fn plan_one<'t>(tool: &'t Tool, settings: &Settings<'_>) -> Planned<'t> {
     match tool.kind {
         Kind::Documented => return skipped("documented only: run it after your tests"),
         Kind::NeedsGit if !settings.git => return skipped("not a git repository"),
-        Kind::Run | Kind::NeedsGit => {}
+        Kind::Managed(managed) if !settings.container && !managed.installed(tools) => {
+            let reason = format!(
+                "not installed in {TOOLS_DIR}/{}: run `{}`",
+                managed.dir(),
+                managed.install()
+            );
+            return Planned {
+                tool,
+                argv,
+                step: Step::Missing(reason),
+            };
+        }
+        Kind::Run | Kind::NeedsGit | Kind::Managed(_) => {}
     }
     let stdout = match tool.sink {
         Sink::Stdout => Some(settings.root.join(REPORTS_DIR).join(tool.output)),
-        Sink::PathArgument => None,
+        Sink::PathArgument | Sink::Config => None,
     };
     if !settings.container {
         let step = match find(settings.path, tool.command) {
             Some(program) => Step::Run {
                 program,
-                version: vec!["--version".to_owned()],
+                version: tool.version_args(inputs),
                 stdout,
             },
             None => Step::Missing("not found on PATH".to_owned()),

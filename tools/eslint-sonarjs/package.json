@@ -1,0 +1,31 @@
+{
+  "name": "sloptopop-eslint-sonarjs",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The tool directory sloptopop collect writes to .sloptopop/tools/eslint-sonarjs/: ESLint with eslint-plugin-sonarjs 2.0.4 (LGPL-3.0-only, the last release before the licence change) and the SARIF formatter, pinned by package-lock.json. Install with npm ci --ignore-scripts.",
+  "license": "MIT OR Apache-2.0",
+  "dependencies": {
+    "@microsoft/eslint-formatter-sarif": "3.1.0",
+    "@typescript-eslint/parser": "7.16.1",
+    "eslint": "9.14.0",
+    "eslint-plugin-sonarjs": "2.0.4",
+    "typescript": "5.5.4"
+  },
+  "overrides": {
+    "@microsoft/eslint-formatter-sarif": {
+      "eslint": "$eslint"
+    },
+    "@typescript-eslint/eslint-plugin": {
+      "eslint": "$eslint"
+    },
+    "@typescript-eslint/parser": {
+      "eslint": "$eslint"
+    },
+    "@typescript-eslint/utils": {
+      "eslint": "$eslint"
+    },
+    "@typescript-eslint/type-utils": {
+      "eslint": "$eslint"
+    }
+  }
+}

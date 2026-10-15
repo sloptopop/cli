@@ -1,11 +1,12 @@
 //! Running the planned tools, each in the repository root, and recording
 //! what happened. A tool that fails is recorded; it never stops the others.
 
-use std::fs::File;
+use std::fs::{self, File};
+use std::io;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-use crate::collect_catalogue::Tool;
+use crate::collect_catalogue::{REPORTS_DIR, Tool};
 use crate::collect_plan::{Planned, Step};
 
 /// What happened to one entry.
@@ -100,7 +101,13 @@ pub(crate) fn run<'t>(planned: Planned<'t>, root: &Path) -> Outcome<'t> {
             stdout,
         } => (
             query_version(&program, &version, root),
-            execute(tool, &program, &argv, stdout.as_deref(), root),
+            match clear(&root.join(REPORTS_DIR), tool.output) {
+                Ok(()) => execute(tool, &program, &argv, stdout.as_deref(), root),
+                Err(e) => Status::Failed {
+                    code: None,
+                    detail: format!("cannot remove an earlier report: {e}"),
+                },
+            },
         ),
     };
     Outcome {
@@ -109,6 +116,24 @@ pub(crate) fn run<'t>(planned: Planned<'t>, root: &Path) -> Outcome<'t> {
         version,
         status,
     }
+}
+
+/// Removes the reports an earlier run left in `reports` that match
+/// `output` when it is a pattern (one `*`), so a project that is gone
+/// leaves no report behind. A plain file name is overwritten by the tool.
+fn clear(reports: &Path, output: &str) -> io::Result<()> {
+    let Some((prefix, suffix)) = output.split_once('*') else {
+        return Ok(());
+    };
+    fs::read_dir(reports)?
+        .flatten()
+        .filter(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            name.len() >= prefix.len() + suffix.len()
+                && name.starts_with(prefix)
+                && name.ends_with(suffix)
+        })
+        .try_for_each(|entry| fs::remove_file(entry.path()))
 }
 
 /// The first non-empty line `program version...` prints, if it succeeds.

@@ -41,7 +41,10 @@ sloptopop check [root]
    Cross-cutting entries (secrets, dependencies, SAST) always apply.
 2. For every entry that applies, looks the executable up on `PATH`. A tool
    that is not there is reported as `missing`. Nothing is ever installed or
-   downloaded.
+   downloaded. The [managed tools](#managed-tools-sloptopoptools) also
+   need their pinned packages in `.sloptopop/tools/`. `collect` writes
+   their manifests there and reports them as `missing`, with the one
+   command that installs them, until you have run it.
 3. Unless `--rules` is given, writes sloptopop's own rule pack (built
    into the binary from [`rules/`](../rules/README.md)) to
    `.sloptopop/reports/.rules/`, replacing what an earlier run left
@@ -60,7 +63,8 @@ sloptopop check [root]
    already ignores `.sloptopop/` (or `.sloptopop/reports/`), it adds a `*`
    line to `.sloptopop/reports/.gitignore`. Reports hold secret locations
    (gitleaks redacts the secrets themselves), dependency lists and machine
-   paths, so they do not belong in version control.
+   paths, so they do not belong in version control. The managed tools
+   directory, `.sloptopop/tools/`, is kept out of git the same way.
 7. Prints one line per tool:
 
    ```
@@ -101,9 +105,16 @@ and `collect` writes it to the file.
 | `staticcheck` | MIT | go | `staticcheck -f sarif ./...` (stdout) | `staticcheck.sarif` | 1 |
 | `golangci-lint` | GPL-3.0-only | go | `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0 --uniq-by-line=false --output.sarif.path=<out> ./...` | `golangci.sarif` | 1 |
 | `swiftlint` | MIT | swift | `swiftlint lint --quiet --reporter sarif` (stdout) | `swiftlint.sarif` | 2 |
+| `eslint-sonarjs` | LGPL-3.0-only | node | `node <eslint> --config <tools>/eslint-sonarjs/eslint.config.mjs --no-inline-config --no-error-on-unmatched-pattern --format <tools>/eslint-sonarjs/node_modules/@microsoft/eslint-formatter-sarif/sarif.js --output-file <out> .` | `eslint-sonarjs.sarif` | 1 |
+| `eslint-sonarjs-json` | LGPL-3.0-only | node | the same with `--format json-with-metadata` | `eslint-sonarjs.json` | 1 |
+| `sonaranalyzer-csharp` | LGPL-3.0-only | dotnet | `dotnet build --no-restore --no-incremental -p:TreatWarningsAsErrors=false -p:DirectoryBuildPropsPath=<tools>/sonaranalyzer-csharp/Directory.Build.props` | `sonaranalyzer-csharp.<project>[.<framework>].sarif` | |
 
-`<rules>` is each rule directory in turn (see step 3 above). The version
-recorded for each tool is the first line of `<command> --version`.
+`<rules>` is each rule directory in turn (see step 3 above). `<tools>` is
+the absolute path of `.sloptopop/tools`, and `<eslint>` is ESLint's
+command-line script (see [Managed tools](#managed-tools-sloptopoptools)).
+The version recorded for each tool is the first line of
+`<command> --version`; for the ESLint entries it is ESLint's
+(`node <eslint> --version`), and for `sonaranalyzer-csharp` the .NET SDK's.
 
 ### Coverage producers (documented, never run)
 
@@ -118,6 +129,99 @@ these entries are listed as `skipped` with the command to run yourself after
 | `c8` | ISC | node | `c8 --reporter=lcov --reports-dir=.sloptopop/reports npm test` (Vitest and Jest: their `lcov` reporter, same directory) | `lcov.info` |
 | `coverlet` | MIT | dotnet | `dotnet test /p:CollectCoverage=true /p:CoverletOutputFormat=lcov /p:CoverletOutput=.sloptopop/reports/dotnet.lcov` | `dotnet.lcov` |
 | `gcovr` | BSD-3-Clause | cpp | `gcovr --lcov .sloptopop/reports/cpp.lcov` (after building with coverage and running the tests) | `cpp.lcov` |
+
+## Managed tools (`.sloptopop/tools/`)
+
+Two analyzers from SonarSource are used at their last releases under
+LGPL-3.0-only. Every later release is under the SONAR Source-Available
+License, which is not an open-source licence. Neither analyzer is a
+standalone executable, so `collect` cannot simply find it on `PATH`, and
+neither is ever installed into your project's own dependencies. Each gets
+a directory of its own, `.sloptopop/tools/<tool>/`. On every run (not
+`--dry-run`) where the tool applies, `collect` writes its manifest files
+there. They are built into the binary from [`tools/`](../tools/). Then you
+install the pinned packages once, from the repository root:
+
+| Directory | Install command | Pinned by |
+|---|---|---|
+| `eslint-sonarjs` | `npm ci --ignore-scripts --prefix .sloptopop/tools/eslint-sonarjs` | `package-lock.json`: every one of its 460 packages by exact version and SHA-512 integrity, all from registry.npmjs.org, none with an install script |
+| `sonaranalyzer-csharp` | `dotnet restore .sloptopop/tools/sonaranalyzer-csharp/fetch.proj` | the exact version; NuGet checks the package signature, and `collect` compares the SHA-512 NuGet records with the pinned one |
+
+Until the pinned versions are there, the entries are `missing` with that
+command as the reason. `collect` itself still downloads nothing, and under
+`--container` these entries are skipped (no image).
+
+| Package | Version | Integrity (SHA-512 of the archive) | Licence | Licence file read |
+|---|---|---|---|---|
+| eslint-plugin-sonarjs | 2.0.4 | `sha512-XVVAB/t0WSgHitHNajIcIDmviCO8kB9VSsrjy+4WUEVM3eieY9SDHEtCDaOMTjj6XMtcAr8BFDXCFaP005s+tg==` | LGPL-3.0-only | `package/LICENSE` in [the archive](https://registry.npmjs.org/eslint-plugin-sonarjs/-/eslint-plugin-sonarjs-2.0.4.tgz) |
+| eslint | 9.14.0 | `sha512-c2FHsVBr87lnUtjP4Yhvk4yEhKrQavGafRA/Se1ouse8PfbfC/Qh9Mxa00yWsZRlqeUB9raXip0aiiUZkgnr9g==` | MIT | `package/LICENSE` in [the archive](https://registry.npmjs.org/eslint/-/eslint-9.14.0.tgz) |
+| @microsoft/eslint-formatter-sarif | 3.1.0 | `sha512-/mn4UXziHzGXnKCg+r8HGgPy+w4RzpgdoqFuqaKOqUVBT5x2CygGefIrO4SusaY7t0C4gyIWMNu6YQT6Jw64Cw==` | MIT | the archive has none: [LICENSE](https://github.com/microsoft/sarif-js-sdk/blob/0ff663e507e989ae751e2e9d94a3360291e3e4e5/LICENSE) at the commit whose `package.json` is 3.1.0 and whose `sarif.js` is the archive's, byte for byte |
+| @typescript-eslint/parser | 7.16.1 | `sha512-u+1Qx86jfGQ5i4JjK33/FnawZRpsLxRnKzGE6EABZ40KxVT/vWsiZFEBBHjFOljmmV3MBYOHEKi0Jm9hbAOClA==` | BSD-2-Clause | `package/LICENSE` in [the archive](https://registry.npmjs.org/@typescript-eslint/parser/-/parser-7.16.1.tgz) |
+| typescript | 5.5.4 | `sha512-Mtq29sKDAEYP7aljRgtPOpTvOfbwRWlS6dPRzwjdE+C0R4brX/GUyhHSecbHMFLNBLcJIPt9nl9yG5TZ1weH+Q==` | Apache-2.0 | `package/LICENSE.txt` in [the archive](https://registry.npmjs.org/typescript/-/typescript-5.5.4.tgz) |
+| SonarAnalyzer.CSharp | 9.32.0.97167 | `sha512-NK5VSMCd8IXdKPSZruJY+Lm7aICuIitnAe5Wrmmgc+7x8ue78ee3pdjYib39t/gFBGTy8A5RiocJiNhEatUvWg==` | LGPL-3.0-only | the package has no licence file, only the nuspec's `LGPL-3.0-only` expression; the text is [LICENSE.txt](https://github.com/SonarSource/sonar-dotnet/blob/9.32.0.97167/LICENSE.txt) at the release tag |
+
+Do not upgrade these by registry metadata. npm lists eslint-plugin-sonarjs
+as `LGPL-3.0-only` for every version up to 4.x, but the LICENSE file
+inside the package is the source-available licence from 3.0.0 onwards.
+
+### `eslint-sonarjs` and `eslint-sonarjs-json`
+
+- **What runs.** ESLint with the plugin's `recommended` configuration on
+  `**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}`, through sloptopop's own
+  [`eslint.config.mjs`](../tools/eslint-sonarjs/eslint.config.mjs), passed
+  with `--config` so the project's own configuration is not used. The
+  configuration's imports resolve from the tool directory, never from the
+  project's `node_modules`. TypeScript is parsed by
+  `@typescript-eslint/parser` without type information, so nothing of the
+  project is built or run, and the plugin's type-aware rules turn
+  themselves off. `.sloptopop/`, `.next/`, `dist/`, `coverage/` and
+  `*.min.js` are not linted.
+- **Which ESLint.** The project's own ESLint (`node_modules/eslint`) if its
+  version is 9.0 to 9.14, otherwise the pinned 9.14.0 in the tool
+  directory. From ESLint 9.15 on, core rules read their defaults from
+  `meta.defaultOptions`. The plugin's typescript-eslint 7 wrappers do not
+  pass those defaults on, so linting stops with a crash. `node` itself
+  must be on `PATH`.
+- **Why `--no-inline-config`.** The project's `eslint-disable` comments
+  name rules of plugins this run does not load, and ESLint would report
+  each of them as an error ("Definition for rule … was not found").
+  Ignoring inline configuration keeps the reports to the plugin's own
+  rules. The cost is that a project's comments suppressing a sonarjs rule
+  are ignored too.
+- **Two runs, two reports.** ESLint writes one format per run.
+  `eslint-sonarjs.sarif` (SARIF 2.1.0, through the formatter) is what
+  `sloptopop check` reads. `eslint-sonarjs.json` is ESLint's
+  `json-with-metadata` output. It keeps each finding's `fix` (a byte range
+  and its replacement text) and `suggestions`, plus the rules' metadata,
+  for tools that apply fixes. The engine lists it as an unrecognised input
+  and reads nothing from it. `--no-error-on-unmatched-pattern` makes a
+  project without matching files a plain empty run.
+
+### `sonaranalyzer-csharp`
+
+- **What runs.** The project's own `dotnet build`, with the analyzer
+  added as Roslyn analyzers by a generated
+  [`Directory.Build.props`](../tools/sonaranalyzer-csharp/Directory.Build.props)
+  in the tool directory, passed with `-p:DirectoryBuildPropsPath=`. That
+  property replaces the repository's own `Directory.Build.props`, so the
+  generated file imports the repository's file first, if there is one
+  (found the same way MSBuild finds it). No project file is changed, and
+  the analyzer never enters the project's restore or lock files.
+- **Reports.** Each project's compiler writes its SARIF v2.1 log
+  (`ErrorLog` with `version=2.1`) to
+  `.sloptopop/reports/sonaranalyzer-csharp.<project>.sarif`. A project
+  built for several target frameworks writes
+  `sonaranalyzer-csharp.<project>.<framework>.sarif`. The logs hold every
+  compiler diagnostic, the analyzer's rules (`S…`) among them. Before
+  each run, `collect` removes the logs of earlier runs, so a project that
+  is gone leaves no stale report.
+- **Flags.** `--no-restore` keeps `collect` offline, so restore the
+  project first, as you would for any build. `--no-incremental` compiles
+  every file, so every file is analysed. `-p:TreatWarningsAsErrors=false`
+  keeps the analyzer's warnings from failing the build, so exit 1 means a
+  real build failure. The build runs the project's own MSBuild logic, like
+  any build of it. That is why this entry runs only after you have
+  installed the analyzer.
 
 ## Why these flags
 
@@ -159,12 +263,42 @@ these entries are listed as `skipped` with the command to run yourself after
 Every tool in the catalogue is under an OSI-approved licence. `collect`
 only starts them as separate processes and reads the files they write:
 nothing is linked into `sloptopop` or bundled with it, and nothing is
-downloaded on your behalf. The copyleft tools (Opengrep and Semgrep under
-LGPL-2.1, golangci-lint under GPL-3.0) are therefore used the way their
-licences allow any program to be used. Their output carries no licence
-obligation for the code that reads it. The `sloptopop` binary stays MIT OR
-Apache-2.0, and so does the rule pack built into it: every rule was written
-for sloptopop and none comes from the Semgrep registry.
+downloaded on your behalf. The copyleft tools are used the way their
+licences allow any program to be used: Opengrep and Semgrep under
+LGPL-2.1, golangci-lint under GPL-3.0, and the two Sonar analyzers under
+LGPL-3.0, which ESLint and the C# compiler load in their own processes.
+Their output carries no licence obligation for the code that reads it. The
+`sloptopop` binary stays MIT OR Apache-2.0. So do the rule pack and the
+`tools/` files built into it: every rule was written for sloptopop, and
+none comes from the Semgrep registry.
+
+Every licence above was read from the tool's licence file, at a release
+tag or inside the released archive, never only from registry metadata.
+The catalogue records the files it was read from (`licence_files`, also in
+`.collect.json`), and its tests refuse an entry without them.
+
+| Entry | Licence | Licence file read |
+|---|---|---|
+| `gitleaks`, `gitleaks-history` | MIT | [gitleaks v8.30.1 LICENSE](https://github.com/gitleaks/gitleaks/blob/v8.30.1/LICENSE) |
+| `osv-scanner` | Apache-2.0 | [osv-scanner v2.7.0 LICENSE](https://github.com/google/osv-scanner/blob/v2.7.0/LICENSE) |
+| `opengrep` | LGPL-2.1-only | [opengrep v1.31.0 LICENSE](https://github.com/opengrep/opengrep/blob/v1.31.0/LICENSE) |
+| `semgrep` | LGPL-2.1-only | [semgrep v1.181.0 LICENSE](https://github.com/semgrep/semgrep/blob/v1.181.0/LICENSE) |
+| `bandit` | Apache-2.0 | [bandit 1.9.4 LICENSE](https://github.com/PyCQA/bandit/blob/1.9.4/LICENSE) |
+| `gosec` | Apache-2.0 | [gosec v2.29.0 LICENSE.txt](https://github.com/securego/gosec/blob/v2.29.0/LICENSE.txt) |
+| `govulncheck` | BSD-3-Clause | [golang/vuln v1.1.4 LICENSE](https://github.com/golang/vuln/blob/v1.1.4/LICENSE) |
+| `ruff` | MIT | [ruff 0.17.1 LICENSE](https://github.com/astral-sh/ruff/blob/0.17.1/LICENSE) |
+| `oxlint` | MIT | [oxlint v1.88.0 LICENSE](https://github.com/oxc-project/oxc/blob/oxlint_v1.88.0/LICENSE) |
+| `biome` | MIT OR Apache-2.0 | [LICENSE-MIT](https://github.com/biomejs/biome/blob/@biomejs/biome@2.5.15/LICENSE-MIT) and [LICENSE-APACHE](https://github.com/biomejs/biome/blob/@biomejs/biome@2.5.15/LICENSE-APACHE) at Biome 2.5.15 |
+| `staticcheck` | MIT | [go-tools 2026.2.2 LICENSE](https://github.com/dominikh/go-tools/blob/2026.2.2/LICENSE) |
+| `golangci-lint` | GPL-3.0-only | [golangci-lint v2.14.0 LICENSE](https://github.com/golangci/golangci-lint/blob/v2.14.0/LICENSE) |
+| `swiftlint` | MIT | [SwiftLint 0.65.1 LICENSE](https://github.com/realm/SwiftLint/blob/0.65.1/LICENSE) |
+| `eslint-sonarjs`, `eslint-sonarjs-json` | LGPL-3.0-only | `package/LICENSE` in [eslint-plugin-sonarjs-2.0.4.tgz](https://registry.npmjs.org/eslint-plugin-sonarjs/-/eslint-plugin-sonarjs-2.0.4.tgz) (the other pinned packages: see [Managed tools](#managed-tools-sloptopoptools)) |
+| `sonaranalyzer-csharp` | LGPL-3.0-only | [sonar-dotnet 9.32.0.97167 LICENSE.txt](https://github.com/SonarSource/sonar-dotnet/blob/9.32.0.97167/LICENSE.txt), and the nuspec in [the package](https://api.nuget.org/v3-flatcontainer/sonaranalyzer.csharp/9.32.0.97167/sonaranalyzer.csharp.9.32.0.97167.nupkg) |
+| `cargo-llvm-cov` | Apache-2.0 OR MIT | [LICENSE-APACHE](https://github.com/taiki-e/cargo-llvm-cov/blob/v0.9.1/LICENSE-APACHE) and [LICENSE-MIT](https://github.com/taiki-e/cargo-llvm-cov/blob/v0.9.1/LICENSE-MIT) at v0.9.1 |
+| `coverage.py` | Apache-2.0 | [coverage.py 7.16.2 LICENSE.txt](https://github.com/nedbat/coveragepy/blob/7.16.2/LICENSE.txt) |
+| `c8` | ISC | [c8 v12.0.0 LICENSE.txt](https://github.com/bcoe/c8/blob/v12.0.0/LICENSE.txt) |
+| `coverlet` | MIT | [coverlet v10.1.0 LICENSE](https://github.com/coverlet-coverage/coverlet/blob/v10.1.0/LICENSE) |
+| `gcovr` | BSD-3-Clause | [gcovr 8.6 LICENSE.txt](https://github.com/gcovr/gcovr/blob/8.6/LICENSE.txt) |
 
 ## `--container`
 
@@ -217,6 +351,7 @@ deterministic: tools in catalogue order, no timestamps, no durations.
                "--report-path", ".sloptopop/reports/gitleaks.sarif", "--exit-code", "0"],
       "exitCode": 0,
       "licence": "MIT",
+      "licenceFiles": ["https://github.com/gitleaks/gitleaks/blob/v8.30.1/LICENSE"],
       "name": "gitleaks",
       "output": ".sloptopop/reports/gitleaks.sarif",
       "status": "ran",
@@ -225,6 +360,7 @@ deterministic: tools in catalogue order, no timestamps, no durations.
     {
       "argv": ["bandit", "-r", ".", "-f", "sarif", "-o", ".sloptopop/reports/bandit.sarif"],
       "licence": "Apache-2.0",
+      "licenceFiles": ["https://github.com/PyCQA/bandit/blob/1.9.4/LICENSE"],
       "name": "bandit",
       "output": ".sloptopop/reports/bandit.sarif",
       "reason": "not found on PATH",
@@ -240,9 +376,10 @@ deterministic: tools in catalogue order, no timestamps, no durations.
 | `mode` | `host` or `container` |
 | `ecosystems` | The detected ecosystems, sorted |
 | `tools[].name`, `licence` | The catalogue entry |
+| `tools[].licenceFiles` | The licence files the licence was read from |
 | `tools[].version` | First line of `--version`; absent if it printed nothing or failed |
 | `tools[].argv` | The command line as run (under `--container`, the `docker` command line) |
-| `tools[].output` | The report path relative to the root |
+| `tools[].output` | The report path relative to the root (for `sonaranalyzer-csharp`, a pattern with `*`) |
 | `tools[].status` | `ran`, `failed`, `missing` or `skipped` |
 | `tools[].exitCode` | The tool's exit code; absent if it did not run or was ended by a signal |
 | `tools[].reason` | Why it failed (first stderr line), is missing or was skipped |

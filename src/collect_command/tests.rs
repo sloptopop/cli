@@ -7,7 +7,8 @@ use std::io;
 use serde_json::Value;
 
 use super::*;
-use crate::tests::support::{TempDir, fake_tools};
+use crate::collect_managed::Managed;
+use crate::tests::support::{TempDir, fake_tools, install_managed};
 
 struct Run {
     code: Result<u8, String>,
@@ -138,6 +139,10 @@ fn installed_tools_run_and_are_recorded() {
             &Value::from(rules.to_string_lossy().into_owned())
         ],
         "the built-in pack, then the local rules"
+    );
+    assert!(
+        !root.0.join(TOOLS_DIR).exists(),
+        "no managed tool applies to Python"
     );
     for rule in collect_pack::PACK {
         assert_eq!(
@@ -330,4 +335,85 @@ fn broken_stdout_exits_1() {
         String::from_utf8_lossy(&stderr).starts_with("error: cannot write output: "),
         "message"
     );
+}
+
+fn node_repo() -> TempDir {
+    let root = TempDir::new();
+    fs::write(root.0.join("package.json"), "{}").unwrap();
+    root
+}
+
+#[test]
+fn managed_tools_get_their_files_and_run_once_installed() {
+    let root = node_repo();
+    let mut options = options(&root.0);
+    options.only = vec![
+        "eslint-sonarjs".to_owned(),
+        "eslint-sonarjs-json".to_owned(),
+    ];
+    let out = run_with(&options, &findings());
+    assert_eq!(out.code, Ok(0), "stderr: {}", out.stderr);
+    assert_eq!(
+        statuses(&record_of(&root)),
+        pairs(&[
+            ("eslint-sonarjs", "missing"),
+            ("eslint-sonarjs-json", "missing")
+        ]),
+        "not installed yet"
+    );
+    let tools = root.0.join(TOOLS_DIR);
+    for file in Managed::EslintSonarjs.files() {
+        assert_eq!(
+            fs::read_to_string(tools.join("eslint-sonarjs").join(file.name)).unwrap(),
+            file.text,
+            "{} written for the install command",
+            file.name
+        );
+    }
+    assert_eq!(
+        fs::read_to_string(tools.join(".gitignore")).unwrap(),
+        "*\n",
+        "the tools are ignored"
+    );
+    install_managed(&root.0);
+    let again = run_with(&options, &findings());
+    assert_eq!(again.code, Ok(0), "stderr: {}", again.stderr);
+    let record = record_of(&root);
+    assert_eq!(
+        statuses(&record),
+        pairs(&[("eslint-sonarjs", "ran"), ("eslint-sonarjs-json", "ran")]),
+        "installed"
+    );
+    assert_eq!(record["tools"][0]["exitCode"], 1, "findings");
+    assert_eq!(
+        record["tools"][0]["version"], "node 1.0.0",
+        "the fake's version"
+    );
+    for file in ["eslint-sonarjs.sarif", "eslint-sonarjs.json"] {
+        assert!(root.0.join(REPORTS_DIR).join(file).is_file(), "{file}");
+    }
+}
+
+#[test]
+fn unwritable_managed_tools_exit_1() {
+    for blocker in [".sloptopop/tools", ".sloptopop/tools/.gitignore/x"] {
+        let root = node_repo();
+        let path = root.0.join(blocker);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "").unwrap();
+        let out = run_with(&options(&root.0), &findings());
+        assert_eq!(out.code, Ok(WRITE_ERROR), "{blocker}");
+        assert!(
+            out.stderr.starts_with(&format!(
+                "error: cannot write {}: ",
+                root.0.join(".sloptopop/tools/eslint-sonarjs").display()
+            )),
+            "{blocker}: {}",
+            out.stderr
+        );
+        assert!(
+            !root.0.join(".fake-calls").exists(),
+            "{blocker}: nothing ran"
+        );
+    }
 }

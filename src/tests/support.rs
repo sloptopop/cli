@@ -8,6 +8,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde_json::{Value, json};
 
+use crate::collect_catalogue::Inputs;
+use crate::collect_managed::{Managed, Registry, TOOLS_DIR};
 use crate::engine_locate::Locator;
 use crate::handshake::PROTOCOL_VERSION;
 
@@ -62,4 +64,45 @@ pub(crate) fn fake_tools(mode: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fake-tools")
         .join(mode)
+}
+
+/// Rendering inputs for argument lists: `rules`, with `TOOLS` as the
+/// managed tools directory and `ESLINT` as the `ESLint` script.
+pub(crate) fn inputs(rules: &[String]) -> Inputs<'_> {
+    Inputs {
+        rules,
+        tools: "TOOLS",
+        eslint: "ESLINT",
+    }
+}
+
+/// Installs, as far as `collect` can tell, every pinned package of every
+/// managed tool in `root`: the npm manifests at the pinned versions and the
+/// `NuGet` package's recorded hash.
+pub(crate) fn install_managed(root: &Path) {
+    for managed in [Managed::EslintSonarjs, Managed::SonarCsharp] {
+        let dir = root.join(TOOLS_DIR).join(managed.dir());
+        for pin in managed.pins() {
+            let (file, text) = match pin.registry {
+                Registry::Npm => (
+                    dir.join("node_modules")
+                        .join(pin.package)
+                        .join("package.json"),
+                    format!(r#"{{"version":"{}"}}"#, pin.version),
+                ),
+                Registry::Nuget => {
+                    let id = pin.package.to_ascii_lowercase();
+                    (
+                        dir.join("packages")
+                            .join(&id)
+                            .join(pin.version)
+                            .join(format!("{id}.{}.nupkg.sha512", pin.version)),
+                        pin.integrity.trim_start_matches("sha512-").to_owned(),
+                    )
+                }
+            };
+            fs::create_dir_all(file.parent().unwrap()).unwrap();
+            fs::write(file, text).unwrap();
+        }
+    }
 }

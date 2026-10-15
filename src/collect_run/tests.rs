@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use super::*;
 use crate::collect_catalogue::CATALOGUE;
-use crate::tests::support::{TempDir, fake_tools};
+use crate::tests::support::{TempDir, fake_tools, inputs};
 
 fn named(name: &str) -> &'static Tool {
     CATALOGUE.iter().find(|tool| tool.name == name).unwrap()
@@ -21,7 +21,7 @@ fn root() -> TempDir {
 fn planned(tool: &'static Tool, program: PathBuf, stdout: Option<PathBuf>) -> Planned<'static> {
     Planned {
         tool,
-        argv: tool.argv(&[]),
+        argv: tool.argv(&inputs(&[])),
         step: Step::Run {
             program,
             version: vec!["--version".to_owned()],
@@ -94,7 +94,7 @@ fn a_tool_writing_its_own_report_runs_in_the_root() {
     );
     assert_eq!(outcome.version.as_deref(), Some("ruff 1.0.0"), "first line");
     assert_eq!(outcome.status, Status::Ran(1), "findings are success");
-    assert_eq!(outcome.argv, named("ruff").argv(&[]), "argv kept");
+    assert_eq!(outcome.argv, named("ruff").argv(&inputs(&[])), "argv kept");
     assert_eq!(
         calls(&root),
         "ruff --version\nruff check --output-format sarif --output-file .sloptopop/reports/ruff.sarif --no-cache .\n",
@@ -223,4 +223,67 @@ fn missing_and_skipped_entries_pass_through() {
         );
     }
     assert_eq!(calls(&root), "", "nothing ran");
+}
+
+#[test]
+fn earlier_reports_matching_a_pattern_are_removed_first() {
+    let root = root();
+    let reports = root.0.join(".sloptopop/reports");
+    let gone = [
+        "sonaranalyzer-csharp.Old.sarif",
+        "sonaranalyzer-csharp..sarif",
+    ];
+    let kept = [
+        "sonaranalyzer-csharp.sarif",
+        "sonaranalyzer-csharp.Old.json",
+        "x.sonaranalyzer-csharp.Old.sarif",
+        "gitleaks.sarif",
+    ];
+    for name in gone.iter().chain(&kept) {
+        fs::write(reports.join(name), "").unwrap();
+    }
+    let tool = named("sonaranalyzer-csharp");
+    let outcome = run(
+        planned(tool, fake_tools("findings").join("dotnet"), None),
+        &root.0,
+    );
+    assert_eq!(outcome.status, Status::Ran(0), "ran");
+    for name in gone {
+        assert!(!reports.join(name).exists(), "{name} removed");
+    }
+    for name in kept {
+        assert!(reports.join(name).exists(), "{name} kept");
+    }
+    assert!(
+        reports.join("sonaranalyzer-csharp.Fake.sarif").is_file(),
+        "the new report"
+    );
+}
+
+#[test]
+fn a_report_that_cannot_be_removed_fails_the_tool() {
+    let tool = named("sonaranalyzer-csharp");
+    let blocked = root();
+    fs::create_dir(
+        blocked
+            .0
+            .join(".sloptopop/reports/sonaranalyzer-csharp.Dir.sarif"),
+    )
+    .unwrap();
+    let missing = TempDir::new();
+    for root in [&blocked, &missing] {
+        let (code, detail) = failed(
+            run(
+                planned(tool, fake_tools("findings").join("dotnet"), None),
+                &root.0,
+            )
+            .status,
+        );
+        assert_eq!(code, None, "{detail}");
+        assert!(
+            detail.starts_with("cannot remove an earlier report: "),
+            "{detail}"
+        );
+        assert_eq!(calls(root), "dotnet --version\n", "the build never started");
+    }
 }
