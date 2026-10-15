@@ -1,0 +1,41 @@
+{
+  "description": "initialize, shutdown, exit: exit code 0",
+  "input": [
+    {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "initialize",
+      "params": {
+        "clientName": "conformance",
+        "clientVersion": "0",
+        "protocolVersion": 1
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "shutdown"
+    },
+    {
+      "jsonrpc": "2.0",
+      "method": "exit"
+    }
+  ],
+  "output": [
+    {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "serverName": "sloptopop",
+        "serverVersion": "$SERVER_VERSION",
+        "protocolVersion": 1
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "result": null
+    }
+  ],
+  "exitCode": 0
+}

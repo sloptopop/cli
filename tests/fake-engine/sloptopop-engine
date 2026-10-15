@@ -1,0 +1,59 @@
+#!/bin/sh
+# Fake sloptopop-engine for the cli tests. The real engine is proprietary
+# and never available to this repository's tests or CI; this script speaks
+# the public Report contract (docs/report-format.md) and nothing else.
+#
+# Usage, as the cli calls the engine:
+#   sloptopop-engine check <mode>
+#   sloptopop-engine fix <mode> [--apply]
+# The path argument selects the behaviour:
+#   pass     a passing Report (exit 0) / a fix result with nothing to do
+#   fail     a failing Report with findings (exit 1) / a fix result with a
+#            planned (or, with --apply, created) file
+#   garbage  text that is not JSON (exit 0)
+#   broken   an error on stderr and exit 3 (an engine failure)
+#   killed   dies from a signal
+#   anything else: a usage error (exit 2)
+# Every call first echoes its arguments to stderr, so tests can check what
+# the cli passed.
+echo "fake-engine: $*" >&2
+command=$1
+mode=$2
+apply=$3
+case "$command/$mode" in
+    check/pass)
+        printf '%s\n' '{"schemaVersion":1,"tool":{"name":"sloptopop","version":"0.0.0-fake"},"root":".","ecosystems":[],"findings":[],"controls":[{"id":"STD-1","title":"Pinned toolchain","status":"pass"}],"passed":true,"analysis":{"inputs":[],"observations":{"error":0,"warning":0,"note":0,"none":0,"suppressed":0},"coverage":{"files":0,"covered":0,"total":0}}}'
+        exit 0
+        ;;
+    check/fail)
+        printf '%s\n' '{"schemaVersion":1,"tool":{"name":"sloptopop","version":"0.0.0-fake"},"root":".","ecosystems":["rust"],"findings":[{"rule":"analyzer.finding","severity":"warning","path":"src/a.py","line":1,"message":"ruff F401: `os` imported but unused","remediation":"Fix what the analyzer reports.","origin":{"tool":"ruff","rule":"F401"}},{"rule":"toolchain.unpinned","severity":"error","path":"rust-toolchain.toml","message":"Rust toolchain is not pinned to an exact version","control":"STD-1","fix":{"kind":"createFile","path":"rust-toolchain.toml","template":"rust-toolchain"},"remediation":"Pin the exact toolchain version."},{"rule":"errors.swallowed","severity":"warning","path":"src/a.py","line":3,"message":"Error handler discards the error","remediation":"Handle, propagate or log the error."}],"controls":[{"id":"STD-1","title":"Pinned toolchain","status":"fail"},{"id":"STD-2","title":"Formatting","status":"notChecked"}],"passed":false,"analysis":{"inputs":[{"path":".sloptopop/reports/notes.txt","outcome":"unrecognised","tools":[]},{"path":".sloptopop/reports/ruff.sarif","format":"sarif","outcome":"read","tools":[{"name":"ruff","version":"0.14.0"}]}],"observations":{"error":0,"warning":1,"note":0,"none":0,"suppressed":0},"coverage":{"files":0,"covered":0,"total":0}}}'
+        exit 1
+        ;;
+    fix/pass)
+        printf '%s\n' '{"schemaVersion":1,"tool":{"name":"sloptopop","version":"0.0.0-fake"},"root":".","applied":false,"changes":[]}'
+        exit 0
+        ;;
+    fix/fail)
+        if [ "$apply" = "--apply" ]; then
+            printf '%s\n' '{"schemaVersion":1,"tool":{"name":"sloptopop","version":"0.0.0-fake"},"root":".","applied":true,"changes":[{"path":"rust-toolchain.toml","template":"rust-toolchain","status":"created"}]}'
+        else
+            printf '%s\n' '{"schemaVersion":1,"tool":{"name":"sloptopop","version":"0.0.0-fake"},"root":".","applied":false,"changes":[{"path":".gitignore","template":"gitignore","status":"exists"},{"path":"rust-toolchain.toml","template":"rust-toolchain","status":"planned"}]}'
+        fi
+        exit 0
+        ;;
+    */garbage)
+        echo "not json"
+        exit 0
+        ;;
+    */broken)
+        echo "error: boom" >&2
+        exit 3
+        ;;
+    */killed)
+        kill -9 $$
+        ;;
+    *)
+        echo "error: unrecognised arguments: $*" >&2
+        exit 2
+        ;;
+esac

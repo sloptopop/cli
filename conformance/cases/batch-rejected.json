@@ -1,0 +1,32 @@
+{
+  "description": "batches are not supported",
+  "input": [
+    [
+      {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+          "clientName": "conformance",
+          "clientVersion": "0",
+          "protocolVersion": 1
+        }
+      }
+    ],
+    {
+      "jsonrpc": "2.0",
+      "method": "exit"
+    }
+  ],
+  "output": [
+    {
+      "jsonrpc": "2.0",
+      "id": null,
+      "error": {
+        "code": -32600,
+        "messagePrefix": "invalid request: "
+      }
+    }
+  ],
+  "exitCode": 1
+}

@@ -1,0 +1,35 @@
+{
+  "description": "a different protocol version is refused, listing supported versions",
+  "input": [
+    {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "initialize",
+      "params": {
+        "clientName": "conformance",
+        "clientVersion": "0",
+        "protocolVersion": 99
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "method": "exit"
+    }
+  ],
+  "output": [
+    {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "error": {
+        "code": -32001,
+        "message": "unsupported protocol version 99; this server speaks 1",
+        "data": {
+          "supported": [
+            1
+          ]
+        }
+      }
+    }
+  ],
+  "exitCode": 1
+}

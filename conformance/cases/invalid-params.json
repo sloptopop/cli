@@ -1,0 +1,25 @@
+{
+  "description": "initialize without params",
+  "input": [
+    {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "initialize"
+    },
+    {
+      "jsonrpc": "2.0",
+      "method": "exit"
+    }
+  ],
+  "output": [
+    {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "error": {
+        "code": -32602,
+        "message": "invalid params: invalid type: null, expected struct InitializeParams"
+      }
+    }
+  ],
+  "exitCode": 1
+}

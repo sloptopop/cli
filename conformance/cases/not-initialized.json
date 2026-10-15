@@ -1,0 +1,25 @@
+{
+  "description": "requests before initialize are refused",
+  "input": [
+    {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "shutdown"
+    },
+    {
+      "jsonrpc": "2.0",
+      "method": "exit"
+    }
+  ],
+  "output": [
+    {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "error": {
+        "code": -32002,
+        "message": "the first request must be initialize"
+      }
+    }
+  ],
+  "exitCode": 1
+}

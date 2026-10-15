@@ -1,0 +1,25 @@
+{
+  "description": "jsonrpc must be \"2.0\"",
+  "input": [
+    {
+      "jsonrpc": "1.0",
+      "id": 7,
+      "method": "initialize"
+    },
+    {
+      "jsonrpc": "2.0",
+      "method": "exit"
+    }
+  ],
+  "output": [
+    {
+      "jsonrpc": "2.0",
+      "id": 7,
+      "error": {
+        "code": -32600,
+        "message": "jsonrpc must be \"2.0\""
+      }
+    }
+  ],
+  "exitCode": 1
+}

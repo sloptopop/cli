@@ -1,0 +1,135 @@
+{
+  "$defs": {
+    "ErrorObject": {
+      "description": "A JSON-RPC error object.",
+      "properties": {
+        "code": {
+          "description": "One of the codes in [`error_code`].",
+          "format": "int64",
+          "type": "integer"
+        },
+        "data": {
+          "description": "Structured detail, if any."
+        },
+        "message": {
+          "description": "Human-readable description.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "Id": {
+      "anyOf": [
+        {
+          "description": "A numeric id.",
+          "format": "int64",
+          "type": "integer"
+        },
+        {
+          "description": "A string id.",
+          "type": "string"
+        }
+      ],
+      "description": "A JSON-RPC request id."
+    },
+    "InitializeParams": {
+      "additionalProperties": false,
+      "description": "Params of the `initialize` request, the first request of every session.",
+      "properties": {
+        "clientName": {
+          "description": "Name of the client library, e.g. `\"sloptopop-python\"`.",
+          "type": "string"
+        },
+        "clientVersion": {
+          "description": "Version of the client library.",
+          "type": "string"
+        },
+        "protocolVersion": {
+          "description": "Protocol version the client speaks; must equal [`PROTOCOL_VERSION`].",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "clientName",
+        "clientVersion",
+        "protocolVersion"
+      ],
+      "type": "object"
+    },
+    "InitializeResult": {
+      "description": "Result of the `initialize` request.",
+      "properties": {
+        "protocolVersion": {
+          "description": "Protocol version the server speaks.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "serverName": {
+          "description": "Always [`SERVER_NAME`].",
+          "type": "string"
+        },
+        "serverVersion": {
+          "description": "Version of the binary.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "serverName",
+        "serverVersion",
+        "protocolVersion"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "JSON-RPC 2.0 over stdin/stdout of `sloptopop serve --stdio`, framed as `Content-Length: N\\r\\n\\r\\n<N bytes of UTF-8 JSON>`.",
+  "error": {
+    "$ref": "#/$defs/ErrorObject"
+  },
+  "errorCodes": {
+    "INVALID_PARAMS": -32602,
+    "INVALID_REQUEST": -32600,
+    "METHOD_NOT_FOUND": -32601,
+    "PARSE_ERROR": -32700,
+    "SERVER_NOT_INITIALIZED": -32002,
+    "UNSUPPORTED_PROTOCOL_VERSION": -32001
+  },
+  "id": {
+    "$ref": "#/$defs/Id"
+  },
+  "methods": {
+    "exit": {
+      "description": "Ends the process: exit code 0 after `shutdown`, otherwise 1.",
+      "kind": "notification"
+    },
+    "initialize": {
+      "description": "First request of every session; negotiates the protocol version.",
+      "kind": "request",
+      "params": {
+        "$ref": "#/$defs/InitializeParams"
+      },
+      "result": {
+        "$ref": "#/$defs/InitializeResult"
+      }
+    },
+    "shutdown": {
+      "description": "Asks the server to stop; only `exit` may follow.",
+      "kind": "request",
+      "params": {
+        "type": "null"
+      },
+      "result": {
+        "type": "null"
+      }
+    }
+  },
+  "protocolVersion": 1,
+  "title": "sloptopop protocol"
+}
