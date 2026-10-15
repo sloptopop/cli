@@ -454,6 +454,32 @@ fn collect_runs_installed_tools_and_check_reads_their_reports() {
 }
 
 #[test]
+fn collect_passes_the_built_in_pack_then_the_local_rules() {
+    let root = collect_fixture("collect-pack");
+    let out = collect(&[
+        "collect",
+        root.to_str().expect("UTF-8"),
+        "--only",
+        "semgrep",
+    ]);
+    assert_eq!(out.status.code(), Some(0), "exit 0");
+    let calls = fs::read_to_string(root.join(".fake-calls")).expect("semgrep ran");
+    let pack = root.join(".sloptopop/reports/.rules");
+    assert!(
+        calls.contains(&format!(
+            "semgrep scan --sarif --metrics off --disable-version-check --no-rewrite-rule-ids --config {} --config {} .\n",
+            pack.display(),
+            root.join(".sloptopop/rules").display()
+        )),
+        "{calls}"
+    );
+    assert!(
+        pack.join("supabase/unchecked-write.yaml").is_file(),
+        "the pack is written"
+    );
+}
+
+#[test]
 fn collect_leaves_ignoring_to_the_root_gitignore() {
     let root = collect_fixture("collect-ignored");
     fs::write(root.join(".gitignore"), "/.sloptopop/\n").expect("gitignore");

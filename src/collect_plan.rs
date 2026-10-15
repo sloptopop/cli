@@ -13,11 +13,26 @@ use crate::collect_lookup::find;
 /// Where the repository is mounted (read-only) inside a container.
 pub(crate) const CONTAINER_ROOT: &str = "/src";
 
-/// Where the rules directory is mounted (read-only) inside a container.
+/// Where the rule directories are mounted (read-only) inside a
+/// container: the first at `/rules/0`, the second at `/rules/1`.
 pub(crate) const CONTAINER_RULES: &str = "/rules";
 
-/// Shown in place of the rules directory when there is none.
-pub(crate) const NO_RULES: &str = "<rules>";
+/// The rule directories Opengrep and Semgrep get, as absolute paths. There
+/// is always a first one, so neither tool can fall back to registry rules.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RuleDirs<'a> {
+    /// The given `--rules` directory, or sloptopop's own pack.
+    pub(crate) first: &'a Path,
+    /// With the pack: `.sloptopop/rules/`, if it exists.
+    pub(crate) second: Option<&'a Path>,
+}
+
+impl<'a> RuleDirs<'a> {
+    /// The directories, in order.
+    fn iter(self) -> impl Iterator<Item = &'a Path> {
+        std::iter::once(self.first).chain(self.second)
+    }
+}
 
 /// Everything the plan depends on.
 #[derive(Debug, Clone, Copy)]
@@ -28,8 +43,8 @@ pub(crate) struct Settings<'a> {
     pub(crate) ecosystems: &'a BTreeSet<Ecosystem>,
     /// Only these entries (empty: all that apply).
     pub(crate) only: &'a [String],
-    /// The local rules directory, as an absolute path.
-    pub(crate) rules: Option<&'a Path>,
+    /// The rule directories.
+    pub(crate) rules: RuleDirs<'a>,
     /// Whether the root is a git repository.
     pub(crate) git: bool,
     /// Run tools from pinned container images.
@@ -81,11 +96,18 @@ pub(crate) fn plan<'t>(catalogue: &'t [Tool], settings: &Settings<'_>) -> Vec<Pl
 }
 
 fn plan_one<'t>(tool: &'t Tool, settings: &Settings<'_>) -> Planned<'t> {
-    let rules = match settings.rules {
-        None => NO_RULES.to_owned(),
-        Some(_) if settings.container => CONTAINER_RULES.to_owned(),
-        Some(rules) => rules.to_string_lossy().into_owned(),
-    };
+    let rules: Vec<String> = settings
+        .rules
+        .iter()
+        .enumerate()
+        .map(|(index, dir)| {
+            if settings.container {
+                format!("{CONTAINER_RULES}/{index}")
+            } else {
+                dir.to_string_lossy().into_owned()
+            }
+        })
+        .collect();
     let argv = tool.argv(&rules);
     let skipped = |reason: &str| Planned {
         tool,
@@ -95,10 +117,7 @@ fn plan_one<'t>(tool: &'t Tool, settings: &Settings<'_>) -> Planned<'t> {
     match tool.kind {
         Kind::Documented => return skipped("documented only: run it after your tests"),
         Kind::NeedsGit if !settings.git => return skipped("not a git repository"),
-        Kind::NeedsRules if settings.rules.is_none() => {
-            return skipped("no local rules: pass --rules <dir> or add .sloptopop/rules/");
-        }
-        Kind::Run | Kind::NeedsGit | Kind::NeedsRules => {}
+        Kind::Run | Kind::NeedsGit => {}
     }
     let stdout = match tool.sink {
         Sink::Stdout => Some(settings.root.join(REPORTS_DIR).join(tool.output)),
@@ -135,8 +154,8 @@ fn plan_one<'t>(tool: &'t Tool, settings: &Settings<'_>) -> Planned<'t> {
 
 /// The `docker run` command line that runs `tool` from `reference` with
 /// `tool_args`: the root mounted read-only, the reports directory read-write,
-/// no network unless the tool downloads a database, and no published
-/// ports.
+/// the rule directories read-only for a tool that takes them, no network
+/// unless the tool downloads a database, and no published ports.
 fn docker_run(
     tool: &Tool,
     reference: &str,
@@ -176,8 +195,10 @@ fn docker_run(
         &format!("{CONTAINER_ROOT}/{REPORTS_DIR}"),
         false,
     );
-    if let Some(rules) = settings.rules {
-        mount(rules, CONTAINER_RULES, true);
+    if tool.takes_rules() {
+        for (index, dir) in settings.rules.iter().enumerate() {
+            mount(dir, &format!("{CONTAINER_RULES}/{index}"), true);
+        }
     }
     argv.extend(
         [

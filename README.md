@@ -11,8 +11,10 @@ sloptopop fix [root]       # show (or --apply) mechanical fixes
 `sloptopop collect` runs the open-source analyzers you already have
 installed (gitleaks, OSV-Scanner, Ruff, golangci-lint and more) with fixed,
 offline flags, each as a separate process; it never installs or bundles a
-tool. See [docs/collect.md](docs/collect.md) for every tool, licence and
-flag, and [docs/](docs/README.md) for the rest of the documentation.
+tool. Opengrep and Semgrep run with sloptopop's own rule pack
+([rules/](rules/README.md), MIT OR Apache-2.0), never with registry rules.
+See [docs/collect.md](docs/collect.md) for every tool, licence and flag,
+and [docs/](docs/README.md) for the rest of the documentation.
 
 ## License
 

@@ -1,0 +1,39 @@
+rules:
+  - id: sloptopop.errors.python-except-pass
+    languages: [python]
+    severity: WARNING
+    message: >-
+      This handler catches every exception and does nothing (`pass`), so
+      errors are swallowed. Log the exception and re-raise it, or catch only
+      the exception you expect.
+    metadata:
+      cwe:
+        - "CWE-390: Detection of Error Condition Without Action"
+      category: correctness
+      confidence: HIGH
+    pattern-either:
+      - pattern: |
+          try:
+              ...
+          except:
+              pass
+      - pattern: |
+          try:
+              ...
+          except Exception:
+              pass
+      - pattern: |
+          try:
+              ...
+          except Exception as $E:
+              pass
+      - pattern: |
+          try:
+              ...
+          except BaseException:
+              pass
+      - pattern: |
+          try:
+              ...
+          except BaseException as $E:
+              pass

@@ -123,14 +123,30 @@ fn installed_tools_run_and_are_recorded() {
         "*\n",
         "ignored"
     );
-    let rules = root.0.join(RULES_DIR).to_string_lossy().into_owned();
-    assert!(
-        record["tools"][4]["argv"]
-            .as_array()
-            .unwrap()
-            .contains(&Value::from(rules)),
-        "default rules directory"
+    let pack = root.0.join(PACK_DIR);
+    let rules = root.0.join(RULES_DIR);
+    let argv = record["tools"][4]["argv"].as_array().unwrap();
+    let config: Vec<&Value> = argv
+        .windows(2)
+        .filter(|pair| pair[0] == "--config")
+        .map(|pair| &pair[1])
+        .collect();
+    assert_eq!(
+        config,
+        [
+            &Value::from(pack.to_string_lossy().into_owned()),
+            &Value::from(rules.to_string_lossy().into_owned())
+        ],
+        "the built-in pack, then the local rules"
     );
+    for rule in collect_pack::PACK {
+        assert_eq!(
+            fs::read_to_string(pack.join(rule.area).join(rule.file)).unwrap(),
+            rule.text,
+            "pack written: {}",
+            rule.file
+        );
+    }
 }
 
 #[test]
@@ -149,13 +165,18 @@ fn explicit_rules_and_git_are_used() {
         pairs(&[("gitleaks-history", "ran"), ("semgrep", "ran")]),
         "only the selected entries"
     );
+    let argv = record["tools"][1]["argv"].as_array().unwrap();
     assert!(
-        record["tools"][1]["argv"]
-            .as_array()
-            .unwrap()
-            .contains(&Value::from(rules.0.to_string_lossy().into_owned())),
+        argv.windows(2)
+            .any(|pair| pair[0] == "--config" && pair[1] == rules.0.to_string_lossy().into_owned()),
         "--rules"
     );
+    assert_eq!(
+        argv.iter().filter(|arg| *arg == "--config").count(),
+        1,
+        "only the given rules"
+    );
+    assert!(!root.0.join(PACK_DIR).exists(), "the pack is not written");
 }
 
 #[test]
@@ -165,7 +186,7 @@ fn missing_tools_never_fail_the_run() {
     assert_eq!(out.code, Ok(0), "exit 0");
     assert!(
         out.stdout
-            .starts_with("sloptopop collect: 0 ran, 0 failed, 4 missing, 4 skipped"),
+            .starts_with("sloptopop collect: 0 ran, 0 failed, 6 missing, 2 skipped"),
         "{}",
         out.stdout
     );
@@ -257,6 +278,20 @@ fn unwritable_reports_exit_1() {
         out.stderr
     );
     assert!(out.stdout.is_empty(), "no summary");
+    let pack = python_repo();
+    fs::create_dir_all(pack.0.join(".sloptopop/reports")).unwrap();
+    fs::write(pack.0.join(PACK_DIR), "").unwrap();
+    let unpacked = run_with(&options(&pack.0), &findings());
+    assert_eq!(unpacked.code, Ok(WRITE_ERROR), "pack");
+    assert!(
+        unpacked.stderr.starts_with(&format!(
+            "error: cannot write {}: ",
+            pack.0.join(PACK_DIR).display()
+        )),
+        "{}",
+        unpacked.stderr
+    );
+    assert!(!pack.0.join(".fake-calls").exists(), "nothing ran");
     let record = python_repo();
     fs::create_dir_all(record.0.join(".sloptopop/reports/.collect.json")).unwrap();
     let unrecorded = run_with(&options(&record.0), &findings());

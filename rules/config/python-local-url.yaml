@@ -1,0 +1,32 @@
+rules:
+  - id: sloptopop.config.python-local-url
+    languages: [python]
+    severity: WARNING
+    message: >-
+      This URL points at localhost or a private network address and is
+      written into the code, so the deployed program talks to a machine that
+      only exists on a developer's network. Read it from configuration (an
+      environment variable), keeping this value only as the local default.
+    metadata:
+      cwe:
+        - "CWE-1051: Initialization with Hard-Coded Network Resource Configuration Data"
+      category: correctness
+      confidence: MEDIUM
+    paths:
+      exclude:
+        - "test_*.py"
+        - "*_test.py"
+        - "conftest.py"
+        - "test/"
+        - "tests/"
+        - "fixtures/"
+    patterns:
+      - pattern: '"$URL"'
+      - metavariable-regex:
+          metavariable: $URL
+          regex: ^["'`]?https?://(?:localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|\[::1\])(?::\d+)?(?:[/?#]|["'`]?$)
+      # Already configurable: the literal is only the default.
+      - pattern-not-inside: os.environ.get($NAME, $DEFAULT)
+      - pattern-not-inside: os.getenv($NAME, $DEFAULT)
+      - pattern-not-inside: os.environ.get($NAME) or $DEFAULT
+      - pattern-not-inside: os.getenv($NAME) or $DEFAULT

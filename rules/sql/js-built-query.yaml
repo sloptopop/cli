@@ -1,0 +1,29 @@
+rules:
+  - id: sloptopop.sql.js-built-query
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      This SQL statement is built by string concatenation or a template
+      literal and passed to a query call, so a value in it can change the
+      statement (SQL injection). Pass the values as bound parameters.
+    metadata:
+      cwe:
+        - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      category: security
+      confidence: MEDIUM
+    patterns:
+      - pattern: $DB.$METHOD($SQL, ...)
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: ^(?:query|execute|exec|raw|run|all|get|prepare|unsafe|\$queryRawUnsafe|\$executeRawUnsafe)$
+      - metavariable-pattern:
+          metavariable: $SQL
+          patterns:
+            - pattern-either:
+                - pattern: '"..." + $VALUE'
+                - pattern: '`...${$VALUE}...`'
+            - pattern-not: '"..." + "..."'
+      # The text starts like a SQL statement.
+      - metavariable-regex:
+          metavariable: $SQL
+          regex: (?i)^["'`]\s*(?:select|insert|update|delete|with|replace|merge|create|alter|drop|truncate)\b

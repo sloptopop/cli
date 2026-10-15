@@ -1,0 +1,20 @@
+rules:
+  - id: sloptopop.tls.js-reject-unauthorized
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      TLS certificate verification is turned off, so any machine between this
+      program and the server can read and change the traffic. Keep
+      verification on and trust the server's CA instead.
+    metadata:
+      cwe:
+        - "CWE-295: Improper Certificate Validation"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: |
+          {..., rejectUnauthorized: false, ...}
+      - pattern: $OPTIONS.rejectUnauthorized = false
+      - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+      - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
+      - pattern: process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0"

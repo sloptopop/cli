@@ -1,0 +1,24 @@
+rules:
+  - id: sloptopop.errors.empty-promise-catch
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      This `.catch` callback does nothing, so a rejected promise is silently
+      ignored. Log the error instead of dropping it.
+    metadata:
+      cwe:
+        - "CWE-390: Detection of Error Condition Without Action"
+      category: correctness
+      confidence: HIGH
+    patterns:
+      - pattern: $PROMISE.catch($HANDLER)
+      - metavariable-pattern:
+          metavariable: $HANDLER
+          pattern-either:
+            - pattern: () => {}
+            - pattern: ($E) => {}
+            - pattern: () => undefined
+            - pattern: ($E) => undefined
+            - pattern: function () {}
+            - pattern: function ($E) {}
+      - focus-metavariable: $HANDLER

@@ -11,12 +11,13 @@ use crate::args::CollectOptions;
 use crate::collect_catalogue::{CATALOGUE, REPORTS_DIR};
 use crate::collect_detect::detect;
 use crate::collect_gitignore::ensure_ignored;
-use crate::collect_plan::{Settings, plan};
+use crate::collect_pack::{self, PACK_DIR};
+use crate::collect_plan::{RuleDirs, Settings, plan};
 use crate::collect_record::{RECORD_FILE, record, summary};
 use crate::collect_run::run;
 use crate::diagnostic::report;
 
-/// The default rules directory, relative to the root.
+/// The local rules directory used next to the pack, relative to the root.
 pub(crate) const RULES_DIR: &str = ".sloptopop/rules";
 
 /// Exit code when the reports cannot be written or stdout is broken.
@@ -43,11 +44,22 @@ pub(crate) fn collect(
     }
     let root =
         directory(&options.root).ok_or_else(|| format!("not a directory: {}", options.root))?;
-    let rules = match &options.rules {
-        Some(dir) => {
-            Some(directory(dir).ok_or_else(|| format!("rules directory not found: {dir}"))?)
-        }
-        None => Some(root.join(RULES_DIR)).filter(|dir| dir.is_dir()),
+    let given = options
+        .rules
+        .as_deref()
+        .map(|dir| directory(dir).ok_or_else(|| format!("rules directory not found: {dir}")))
+        .transpose()?;
+    let pack = root.join(PACK_DIR);
+    let local = Some(root.join(RULES_DIR)).filter(|dir| dir.is_dir());
+    let rules = match &given {
+        Some(dir) => RuleDirs {
+            first: dir,
+            second: None,
+        },
+        None => RuleDirs {
+            first: &pack,
+            second: local.as_deref(),
+        },
     };
     let ecosystems = detect(&root).unwrap_or_default();
     let planned = plan(
@@ -56,7 +68,7 @@ pub(crate) fn collect(
             root: &root,
             ecosystems: &ecosystems,
             only: &options.only,
-            rules: rules.as_deref(),
+            rules,
             git: root.join(".git").exists(),
             container: options.container,
             path,
@@ -72,6 +84,11 @@ pub(crate) fn collect(
     let reports = root.join(REPORTS_DIR);
     if let Err(e) = fs::create_dir_all(&reports).and_then(|()| ensure_ignored(&root, &reports)) {
         return Ok(failure(stderr, &reports, &e));
+    }
+    if given.is_none()
+        && let Err(e) = collect_pack::write(&pack)
+    {
+        return Ok(failure(stderr, &pack, &e));
     }
     let outcomes: Vec<_> = planned.into_iter().map(|entry| run(entry, &root)).collect();
     let record_path = reports.join(RECORD_FILE);

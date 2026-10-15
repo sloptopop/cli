@@ -1,0 +1,16 @@
+rules:
+  - id: sloptopop.tls.python-verify-false
+    languages: [python]
+    severity: ERROR
+    message: >-
+      TLS certificate verification is turned off, so any machine between this
+      program and the server can read and change the traffic. Keep
+      verification on and pass the server's CA bundle instead.
+    metadata:
+      cwe:
+        - "CWE-295: Improper Certificate Validation"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: $CALL(..., verify=False, ...)
+      - pattern: ssl._create_unverified_context(...)

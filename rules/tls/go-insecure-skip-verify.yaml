@@ -1,0 +1,18 @@
+rules:
+  - id: sloptopop.tls.go-insecure-skip-verify
+    languages: [go]
+    severity: ERROR
+    message: >-
+      TLS certificate verification is turned off (`InsecureSkipVerify`), so
+      any machine between this program and the server can read and change
+      the traffic. Keep verification on and add the server's CA to `RootCAs`
+      instead.
+    metadata:
+      cwe:
+        - "CWE-295: Improper Certificate Validation"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: |
+          $CONFIG{..., InsecureSkipVerify: true, ...}
+      - pattern: $C.InsecureSkipVerify = true

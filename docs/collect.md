@@ -15,7 +15,7 @@ sloptopop check [root]
 |---|---|
 | `root` | The repository root (default: the current directory) |
 | `--only <tool,...>` | Only these catalogue entries, by the names below; repeatable. It narrows the applicable entries and never adds one whose ecosystem was not detected. An unknown name is a usage error. |
-| `--rules <dir>` | Local rules for Opengrep and Semgrep (default: `.sloptopop/rules/` if it exists) |
+| `--rules <dir>` | Rules for Opengrep and Semgrep, used instead of the defaults (default: sloptopop's own [rule pack](../rules/README.md), plus `.sloptopop/rules/` if it exists) |
 | `--container` | Run each tool from a digest-pinned container image instead of `PATH` (see below) |
 | `--dry-run` | Print the plan (tools, command lines, outputs) and run nothing; nothing is written |
 
@@ -42,32 +42,41 @@ sloptopop check [root]
 2. For every entry that applies, looks the executable up on `PATH`. A tool
    that is not there is reported as `missing`. Nothing is ever installed or
    downloaded.
-3. Runs each installed tool with the repository root as its working
+3. Unless `--rules` is given, writes sloptopop's own rule pack (built
+   into the binary from [`rules/`](../rules/README.md)) to
+   `.sloptopop/reports/.rules/`, replacing what an earlier run left
+   there. Opengrep and Semgrep get that directory and then
+   `.sloptopop/rules/` if it exists; with `--rules <dir>` they get only
+   `<dir>`.
+4. Runs each installed tool with the repository root as its working
    directory and its report going to `.sloptopop/reports/<output>`: either
    through the tool's own output flag or by writing its stdout to the file.
    The exit code is recorded. Exit 0 and the tool's "findings found" codes
    count as `ran`. Any other code, a signal, or a tool that cannot start
    counts as `failed`, with the first line of its stderr. A failure never
    stops the other tools.
-4. Writes `.sloptopop/reports/.collect.json` (see below).
-5. Makes sure git ignores the reports. Unless the root `.gitignore`
+5. Writes `.sloptopop/reports/.collect.json` (see below).
+6. Makes sure git ignores the reports. Unless the root `.gitignore`
    already ignores `.sloptopop/` (or `.sloptopop/reports/`), it adds a `*`
    line to `.sloptopop/reports/.gitignore`. Reports hold secret locations
    (gitleaks redacts the secrets themselves), dependency lists and machine
    paths, so they do not belong in version control.
-6. Prints one line per tool:
+7. Prints one line per tool:
 
    ```
-   sloptopop collect: 3 ran, 0 failed, 1 missing, 2 skipped (ecosystems: python)
+   sloptopop collect: 4 ran, 0 failed, 1 missing, 2 skipped (ecosystems: python)
      ran      gitleaks         exit 0  .sloptopop/reports/gitleaks.sarif
+     skipped  gitleaks-history not a git repository
      ran      osv-scanner      exit 1  .sloptopop/reports/osv-scanner.sarif
-     skipped  opengrep         no local rules: pass --rules <dir> or add .sloptopop/rules/
+     missing  opengrep         not found on PATH
+     ran      semgrep          exit 0  .sloptopop/reports/semgrep.sarif
      ...
    ```
 
 `collect` exits 0 whatever the tools did. It exits 2 for invalid arguments
 (an unknown tool, a root or rules directory that does not exist) and 1 only
-if it cannot write the reports directory, `.collect.json` or its output.
+if it cannot write the reports directory, the rule pack, `.collect.json`
+or its output.
 
 ## The catalogue
 
@@ -81,8 +90,8 @@ and `collect` writes it to the file.
 | `gitleaks` | MIT | all | `gitleaks dir . --redact --report-format sarif --report-path <out> --exit-code 0` | `gitleaks.sarif` | (none needed) |
 | `gitleaks-history` | MIT | all git repositories | `gitleaks git . --redact --report-format sarif --report-path <out> --exit-code 0` | `gitleaks.history.sarif` | (none needed) |
 | `osv-scanner` | Apache-2.0 | all | `osv-scanner scan source -r --offline-vulnerabilities --download-offline-databases --format sarif .` (stdout) | `osv-scanner.sarif` | 1, 128 |
-| `opengrep` | LGPL-2.1-only | all, with local rules | `opengrep scan --sarif --config <rules> .` (stdout) | `opengrep.sarif` | |
-| `semgrep` | LGPL-2.1-only | all, with local rules | `semgrep scan --sarif --metrics off --disable-version-check --config <rules> .` (stdout) | `semgrep.sarif` | |
+| `opengrep` | LGPL-2.1-only | all | `opengrep scan --sarif --no-rewrite-rule-ids --config <rules> [--config <rules>] .` (stdout) | `opengrep.sarif` | |
+| `semgrep` | LGPL-2.1-only | all | `semgrep scan --sarif --metrics off --disable-version-check --no-rewrite-rule-ids --config <rules> [--config <rules>] .` (stdout) | `semgrep.sarif` | |
 | `bandit` | Apache-2.0 | python | `bandit -r . -f sarif -o <out>` | `bandit.sarif` | 1 |
 | `gosec` | Apache-2.0 | go | `gosec -fmt sarif -out <out> ./...` | `gosec.sarif` | 1 |
 | `govulncheck` | BSD-3-Clause | go | `govulncheck -format sarif ./...` (stdout) | `govulncheck.sarif` | 3 |
@@ -93,8 +102,8 @@ and `collect` writes it to the file.
 | `golangci-lint` | GPL-3.0-only | go | `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0 --uniq-by-line=false --output.sarif.path=<out> ./...` | `golangci.sarif` | 1 |
 | `swiftlint` | MIT | swift | `swiftlint lint --quiet --reporter sarif` (stdout) | `swiftlint.sarif` | 2 |
 
-The version recorded for each tool is the first line of
-`<command> --version`.
+`<rules>` is each rule directory in turn (see step 3 above). The version
+recorded for each tool is the first line of `<command> --version`.
 
 ### Coverage producers (documented, never run)
 
@@ -123,13 +132,21 @@ these entries are listed as `skipped` with the command to run yourself after
   the OSV database (`--offline-vulnerabilities`), so the dependency list
   never leaves the machine. `--download-offline-databases` fetches that
   database; it is the only download any entry makes. Semgrep runs with
-  `--metrics off --disable-version-check`. Ruff runs with `--no-cache`, so
+  `--metrics off --disable-version-check`, so it sends no usage data and
+  never asks for the latest version; Opengrep does neither in the first
+  place and has no such flags. Ruff runs with `--no-cache`, so
   it writes nothing into the repository. govulncheck is the exception: it
   looks up the module paths it finds in the Go vulnerability database
   (vuln.go.dev) and needs network to do so.
-- **Local rules only.** Opengrep and Semgrep only run with a rules
-  directory you provide (`--rules <dir>` or `.sloptopop/rules/`). The
-  Semgrep registry rules are not under an OSI licence and are never used.
+- **Own rules, never registry rules.** Opengrep and Semgrep always get an
+  explicit rules directory: sloptopop's own rule pack (MIT OR Apache-2.0,
+  written for sloptopop; see [`rules/README.md`](../rules/README.md)) plus
+  `.sloptopop/rules/` if you have one, or only the directory you pass with
+  `--rules`. They never run without `--config`, which would fetch rules
+  from the registry. The Semgrep registry rules are not under an OSI
+  licence and are never used. `--no-rewrite-rule-ids` keeps each rule id
+  as written (`sloptopop.errors.empty-catch`) instead of prefixing it with
+  the path of the rules directory, so the ids in the reports are stable.
 - **Secrets stay redacted.** gitleaks always runs with `--redact`, and the
   reports directory is ignored by git.
 - **"Findings" is not failure.** Each tool's "findings found" exit codes are
@@ -146,7 +163,8 @@ downloaded on your behalf. The copyleft tools (Opengrep and Semgrep under
 LGPL-2.1, golangci-lint under GPL-3.0) are therefore used the way their
 licences allow any program to be used. Their output carries no licence
 obligation for the code that reads it. The `sloptopop` binary stays MIT OR
-Apache-2.0.
+Apache-2.0, and so does the rule pack built into it: every rule was written
+for sloptopop and none comes from the Semgrep registry.
 
 ## `--container`
 
@@ -158,12 +176,14 @@ docker run --rm --network none --user <uid>:<gid> --cap-drop ALL \
   --security-opt no-new-privileges --env HOME=/tmp \
   --mount type=bind,source=<root>,target=/src,readonly \
   --mount type=bind,source=<root>/.sloptopop/reports,target=/src/.sloptopop/reports \
-  [--mount type=bind,source=<rules>,target=/rules,readonly] \
+  [--mount type=bind,source=<rules>,target=/rules/0,readonly \
+   [--mount type=bind,source=<rules>,target=/rules/1,readonly]] \
   --workdir /src --entrypoint <command> <image>@sha256:<digest> <arguments>
 ```
 
-- The root is mounted read-only. Only the reports directory is writable,
-  and the rules directory is mounted read-only at `/rules`. The tool runs
+- The root is mounted read-only. Only the reports directory is writable.
+  For Opengrep and Semgrep, the rule directories are mounted read-only at
+  `/rules/0` (and `/rules/1`) and passed as `--config /rules/0`. The tool runs
   as the owner of the root directory, so the reports belong to you.
 - No network (`--network none`). The one exception is OSV-Scanner, which
   gets the default bridge network for its database download, its own

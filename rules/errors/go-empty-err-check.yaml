@@ -1,0 +1,26 @@
+rules:
+  - id: sloptopop.errors.go-empty-err-check
+    languages: [go]
+    severity: WARNING
+    message: >-
+      This `if err != nil` block is empty, so the error is checked and then
+      ignored. Return it (wrapped with context) or handle it.
+    metadata:
+      cwe:
+        - "CWE-390: Detection of Error Condition Without Action"
+      category: correctness
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              if $ERR != nil {
+              }
+          - pattern: |
+              if $ERR := $CALL; $ERR != nil {
+              }
+          - pattern: |
+              if $V, $ERR := $CALL; $ERR != nil {
+              }
+      - metavariable-regex:
+          metavariable: $ERR
+          regex: ^(err|[A-Za-z0-9_]*Err|[A-Za-z0-9_]*Error)$

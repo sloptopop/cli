@@ -19,8 +19,8 @@
 //! the same layer know nothing of each other. Bottom to top:
 //!
 //! 0. `args`, `collect_detect`, `collect_gitignore`, `collect_lookup`,
-//!    `diagnostic`, `engine_locate`, `framing`, `handshake`, `json_fields`,
-//!    `jsonrpc` (no crate imports)
+//!    `collect_pack`, `diagnostic`, `engine_locate`, `framing`, `handshake`,
+//!    `json_fields`, `jsonrpc` (no crate imports)
 //! 1. `collect_catalogue`, `engine_run`, `render_fix`, `render_report`,
 //!    `schema`, `session`
 //! 2. `collect_plan`, `command_io`, `server`
@@ -40,6 +40,7 @@ mod collect_command;
 mod collect_detect;
 mod collect_gitignore;
 mod collect_lookup;
+mod collect_pack;
 mod collect_plan;
 mod collect_record;
 mod collect_run;

@@ -1,0 +1,31 @@
+rules:
+  - id: sloptopop.sql.go-built-query
+    languages: [go]
+    severity: ERROR
+    message: >-
+      This SQL statement is built with `+` or `fmt.Sprintf` and passed to a
+      query call, so a value in it can change the statement (SQL injection).
+      Pass the values as query arguments.
+    metadata:
+      cwe:
+        - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      category: security
+      confidence: MEDIUM
+    patterns:
+      - pattern-either:
+          - pattern: $DB.$METHOD($SQL, ...)
+          - pattern: $DB.$METHOD($CTX, $SQL, ...)
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: ^(?:Query|QueryRow|QueryContext|QueryRowContext|Exec|ExecContext|Prepare|PrepareContext|Queryx|QueryRowx|MustExec|Select|Get|Raw)$
+      - metavariable-pattern:
+          metavariable: $SQL
+          patterns:
+            - pattern-either:
+                - pattern: '"..." + $VALUE'
+                - pattern: fmt.Sprintf("...", ...)
+            - pattern-not: '"..." + "..."'
+      # The text starts like a SQL statement.
+      - metavariable-regex:
+          metavariable: $SQL
+          regex: (?i)^(?:fmt\.Sprintf\(\s*)?["`]\s*(?:select|insert|update|delete|with|replace|merge|create|alter|drop|truncate)\b

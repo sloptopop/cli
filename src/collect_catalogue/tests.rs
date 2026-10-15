@@ -23,7 +23,7 @@ fn entry(name: &str) -> &'static Tool {
 }
 
 fn has(tool: &Tool, flags: &[&str]) -> bool {
-    let argv = tool.argv("RULES");
+    let argv = tool.argv(&["RULES".to_owned()]);
     argv.windows(flags.len()).any(|window| window == flags)
 }
 
@@ -104,9 +104,9 @@ fn flags_are_fixed_and_the_sink_matches_the_arguments() {
         };
         assert_eq!(outputs, expected, "{}: output argument", tool.name);
         assert_eq!(
-            tool.args.contains(&Rules),
-            tool.kind == Kind::NeedsRules,
-            "{}: rules argument iff rules are needed",
+            tool.takes_rules(),
+            matches!(tool.name, "opengrep" | "semgrep"),
+            "{}: only Opengrep and Semgrep take rules",
             tool.name
         );
         for arg in tool.args {
@@ -197,7 +197,11 @@ fn security_relevant_flags_are_present() {
     for name in ["opengrep", "semgrep"] {
         assert!(
             has(entry(name), &["--config", "RULES"]),
-            "{name}: local rules"
+            "{name}: the given rules only"
+        );
+        assert!(
+            has(entry(name), &["--no-rewrite-rule-ids"]),
+            "{name}: rule ids as written"
         );
     }
     assert!(has(entry("semgrep"), &["--metrics", "off"]), "no metrics");
@@ -222,13 +226,13 @@ fn argv_renders_every_argument_kind() {
         command: "tool",
         licence: "MIT",
         scope: Scope::CrossCutting,
-        kind: Kind::NeedsRules,
+        kind: Kind::Run,
         args: &[
             Fixed("-x"),
             Output(""),
             Output("--out="),
             ReportsDir("--dir="),
-            Rules,
+            Rules("--config"),
         ],
         output: "t.sarif",
         sink: Sink::PathArgument,
@@ -237,17 +241,22 @@ fn argv_renders_every_argument_kind() {
         image: None,
     };
     assert_eq!(
-        tool.argv("/rules"),
+        tool.argv(&["/a".to_owned(), "/b".to_owned()]),
         [
             "tool",
             "-x",
             ".sloptopop/reports/t.sarif",
             "--out=.sloptopop/reports/t.sarif",
             "--dir=.sloptopop/reports",
-            "/rules"
+            "--config",
+            "/a",
+            "--config",
+            "/b"
         ],
         "argv"
     );
+    assert!(tool.takes_rules(), "takes rules");
+    assert!(!entry("ruff").takes_rules(), "ruff takes none");
     assert_eq!(
         tool.output_path(),
         ".sloptopop/reports/t.sarif",

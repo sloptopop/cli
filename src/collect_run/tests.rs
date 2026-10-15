@@ -21,7 +21,7 @@ fn root() -> TempDir {
 fn planned(tool: &'static Tool, program: PathBuf, stdout: Option<PathBuf>) -> Planned<'static> {
     Planned {
         tool,
-        argv: tool.argv("<rules>"),
+        argv: tool.argv(&[]),
         step: Step::Run {
             program,
             version: vec!["--version".to_owned()],
@@ -94,7 +94,7 @@ fn a_tool_writing_its_own_report_runs_in_the_root() {
     );
     assert_eq!(outcome.version.as_deref(), Some("ruff 1.0.0"), "first line");
     assert_eq!(outcome.status, Status::Ran(1), "findings are success");
-    assert_eq!(outcome.argv, named("ruff").argv("<rules>"), "argv kept");
+    assert_eq!(outcome.argv, named("ruff").argv(&[]), "argv kept");
     assert_eq!(
         calls(&root),
         "ruff --version\nruff check --output-format sarif --output-file .sloptopop/reports/ruff.sarif --no-cache .\n",

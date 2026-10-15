@@ -1,0 +1,55 @@
+rules:
+  - id: sloptopop.supabase.unchecked-write
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      The error of this supabase-js write is never looked at: the client
+      resolves with `{ error }` instead of throwing, so a failed insert,
+      update, upsert or delete goes unnoticed. `.throwOnError()` makes the
+      promise reject instead.
+    metadata:
+      cwe:
+        - "CWE-252: Unchecked Return Value"
+      category: correctness
+      confidence: MEDIUM
+    patterns:
+      - pattern-either:
+          # The result is dropped: the await is a statement of its own,
+          # not part of a declaration, assignment, return or argument.
+          - patterns:
+              - pattern: await $QUERY;
+              - pattern-not-inside: const $RESULT = await $QUERY;
+              - pattern-not-inside: let $RESULT = await $QUERY;
+              - pattern-not-inside: var $RESULT = await $QUERY;
+              - pattern-not-inside: $RESULT = await $QUERY
+              - pattern-not-inside: return await $QUERY;
+              - pattern-not-inside: $CALLEE(..., await $QUERY, ...)
+              - pattern-not-inside: (await $QUERY).$PROPERTY
+          # The result is destructured without `error`.
+          - patterns:
+              # Semgrep reads a destructuring declaration as an
+              # assignment, so this covers const, let and var.
+              - pattern: $FIELDS = await $QUERY
+              - metavariable-regex:
+                  metavariable: $FIELDS
+                  regex: ^\{(?![\s\S]*\berror\b)
+      # A write somewhere in the builder chain.
+      - metavariable-pattern:
+          metavariable: $QUERY
+          pattern-either:
+            - pattern: $CLIENT.from(...).insert(...)
+            - pattern: $CLIENT.from(...).update(...)
+            - pattern: $CLIENT.from(...).upsert(...)
+            - pattern: $CLIENT.from(...).delete(...)
+      # The chain itself starts at `.from(...)` (so the whole expression is
+      # the builder), is not Storage, and does not already handle the
+      # error with `.throwOnError()`, `.then()` or `.catch()`.
+      - metavariable-regex:
+          metavariable: $QUERY
+          regex: ^(?![\s\S]*\.\s*(?:throwOnError|then|catch)\s*\()(?![\w$.\s]*\bstorage\b)[\w$]+(?:\s*\??\.\s*[\w$]+)*(?:\(\s*\))?\s*\.\s*from\s*\(
+    # Inserts exactly `.throwOnError()` after the call that ends the
+    # builder chain (the last `)` of the statement, before an optional
+    # `;`); every other byte of the statement stays as it was.
+    fix-regex:
+      regex: \)(;?)$
+      replacement: ).throwOnError()\1

@@ -26,8 +26,9 @@ pub(crate) enum Arg {
     Output(&'static str),
     /// The reports directory relative to the root, after this prefix.
     ReportsDir(&'static str),
-    /// The local rules directory.
-    Rules,
+    /// The flag, then one rule directory, repeated for each directory
+    /// (`--config <dir> --config <dir>`).
+    Rules(&'static str),
 }
 
 /// Where a tool's report goes.
@@ -46,8 +47,6 @@ pub(crate) enum Kind {
     Run,
     /// Only in a git repository (the tool reads the history).
     NeedsGit,
-    /// Only with a local rules directory (never registry rules).
-    NeedsRules,
     /// Never run: the command needs the project's own test run, so it is
     /// only documented.
     Documented,
@@ -134,15 +133,26 @@ impl Tool {
         format!("{REPORTS_DIR}/{}", self.output)
     }
 
-    /// The command and its arguments, with `rules` as the rules directory.
-    pub(crate) fn argv(&self, rules: &str) -> Vec<String> {
+    /// Whether the tool takes rule directories ([`Rules`]).
+    pub(crate) fn takes_rules(&self) -> bool {
+        self.args.iter().any(|arg| matches!(arg, Rules(_)))
+    }
+
+    /// The command and its arguments, with `rules` as the rule
+    /// directories.
+    pub(crate) fn argv(&self, rules: &[String]) -> Vec<String> {
         let output = self.output_path();
         std::iter::once(self.command.to_owned())
-            .chain(self.args.iter().map(|arg| match arg {
-                Fixed(value) => (*value).to_owned(),
-                Output(prefix) => format!("{prefix}{output}"),
-                ReportsDir(prefix) => format!("{prefix}{REPORTS_DIR}"),
-                Rules => rules.to_owned(),
+            .chain(self.args.iter().flat_map(|arg| {
+                match arg {
+                    Fixed(value) => vec![(*value).to_owned()],
+                    Output(prefix) => vec![format!("{prefix}{output}")],
+                    ReportsDir(prefix) => vec![format!("{prefix}{REPORTS_DIR}")],
+                    Rules(flag) => rules
+                        .iter()
+                        .flat_map(|dir| [(*flag).to_owned(), dir.clone()])
+                        .collect(),
+                }
             }))
             .collect()
     }
@@ -237,18 +247,19 @@ pub(crate) const CATALOGUE: &[Tool] = &[
             digest: None,
         }),
     },
-    // SAST and taint with local rules only.
+    // SAST with sloptopop's own rule pack or the given rules, never
+    // registry rules. Rule ids are kept as written (no path prefix).
     Tool {
         name: "opengrep",
         command: "opengrep",
         licence: "LGPL-2.1-only",
         scope: Scope::CrossCutting,
-        kind: Kind::NeedsRules,
+        kind: Kind::Run,
         args: &[
             Fixed("scan"),
             Fixed("--sarif"),
-            Fixed("--config"),
-            Rules,
+            Fixed("--no-rewrite-rule-ids"),
+            Rules("--config"),
             Fixed("."),
         ],
         output: "opengrep.sarif",
@@ -263,15 +274,15 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         command: "semgrep",
         licence: "LGPL-2.1-only",
         scope: Scope::CrossCutting,
-        kind: Kind::NeedsRules,
+        kind: Kind::Run,
         args: &[
             Fixed("scan"),
             Fixed("--sarif"),
             Fixed("--metrics"),
             Fixed("off"),
             Fixed("--disable-version-check"),
-            Fixed("--config"),
-            Rules,
+            Fixed("--no-rewrite-rule-ids"),
+            Rules("--config"),
             Fixed("."),
         ],
         output: "semgrep.sarif",

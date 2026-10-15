@@ -1,0 +1,26 @@
+rules:
+  - id: sloptopop.eval.js-dynamic-code
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Code built at run time is executed with `eval` or `new Function`; if
+      any part of it comes from input, that input runs as code. Parse data
+      with `JSON.parse` or dispatch to known functions instead.
+    metadata:
+      cwe:
+        - "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code ('Eval Injection')"
+      category: security
+      confidence: MEDIUM
+    patterns:
+      - pattern-either:
+          - pattern: eval($CODE)
+          - pattern: window.eval($CODE)
+          - pattern: globalThis.eval($CODE)
+          - pattern: new Function(..., $CODE)
+          - pattern: Function(..., $CODE)
+      # A string literal is fixed code, not input.
+      - pattern-not: eval("...")
+      - pattern-not: window.eval("...")
+      - pattern-not: globalThis.eval("...")
+      - pattern-not: new Function(..., "...")
+      - pattern-not: Function(..., "...")

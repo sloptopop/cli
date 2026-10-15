@@ -1,0 +1,22 @@
+rules:
+  - id: sloptopop.errors.empty-catch
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      This catch block is empty or holds only comments, so the error is
+      swallowed and the operation looks like it succeeded. Log the error and
+      rethrow it, or rethrow it.
+    metadata:
+      cwe:
+        - "CWE-390: Detection of Error Condition Without Action"
+      category: correctness
+      confidence: HIGH
+    pattern-either:
+      - pattern: |
+          try { ... } catch ($ERR) {}
+      - pattern: |
+          try { ... } catch {}
+      - pattern: |
+          try { ... } catch ($ERR) {} finally { ... }
+      - pattern: |
+          try { ... } catch {} finally { ... }

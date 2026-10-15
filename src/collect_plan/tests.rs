@@ -29,7 +29,8 @@ struct Fixture {
     root: TempDir,
     ecosystems: BTreeSet<Ecosystem>,
     only: Vec<String>,
-    rules: Option<PathBuf>,
+    pack: PathBuf,
+    local: Option<PathBuf>,
     git: bool,
     container: bool,
     path: OsString,
@@ -37,11 +38,14 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
+        let root = TempDir::new();
+        let pack = root.0.join(".sloptopop/reports/.rules");
         Self {
-            root: TempDir::new(),
+            root,
             ecosystems: BTreeSet::from([Ecosystem::Python]),
             only: Vec::new(),
-            rules: None,
+            pack,
+            local: None,
             git: true,
             container: false,
             path: fake_tools("findings").into_os_string(),
@@ -55,7 +59,10 @@ impl Fixture {
                 root: &self.root.0,
                 ecosystems: &self.ecosystems,
                 only: &self.only,
-                rules: self.rules.as_deref(),
+                rules: RuleDirs {
+                    first: &self.pack,
+                    second: self.local.as_deref(),
+                },
                 git: self.git,
                 container: self.container,
                 path: Some(&self.path),
@@ -176,15 +183,7 @@ fn entries_are_skipped_for_a_reason() {
         "not a git repository",
         "history"
     );
-    let semgrep = fixture.one(named("semgrep"));
-    assert!(semgrep.argv.contains(&NO_RULES.to_owned()), "placeholder");
-    assert_eq!(
-        skipped(semgrep),
-        "no local rules: pass --rules <dir> or add .sloptopop/rules/",
-        "rules"
-    );
     fixture.git = true;
-    fixture.rules = Some(fixture.root.0.join("rules"));
     assert!(
         matches!(
             fixture.one(named("gitleaks-history")).step,
@@ -192,13 +191,29 @@ fn entries_are_skipped_for_a_reason() {
         ),
         "git repository"
     );
-    let with_rules = fixture.one(named("semgrep"));
-    assert!(matches!(with_rules.step, Step::Run { .. }), "rules given");
-    assert!(
-        with_rules
+}
+
+#[test]
+fn rule_directories_are_passed_in_order() {
+    let mut fixture = Fixture::new();
+    let config = |planned: &Planned<'_>| -> Vec<String> {
+        planned
             .argv
-            .contains(&fixture.root.0.join("rules").to_string_lossy().into_owned()),
-        "host rules path"
+            .windows(2)
+            .filter(|pair| pair[0] == "--config")
+            .map(|pair| pair[1].clone())
+            .collect()
+    };
+    let pack = fixture.pack.to_string_lossy().into_owned();
+    let semgrep = fixture.one(named("semgrep"));
+    assert!(matches!(semgrep.step, Step::Run { .. }), "always runs");
+    assert_eq!(config(&semgrep), std::slice::from_ref(&pack), "the pack");
+    let local = fixture.root.0.join(".sloptopop/rules");
+    fixture.local = Some(local.clone());
+    assert_eq!(
+        config(&fixture.one(named("opengrep"))),
+        [pack, local.to_string_lossy().into_owned()],
+        "the pack, then the local rules"
     );
 }
 
@@ -240,6 +255,7 @@ fn docker(fixture: &Fixture, network: &str, extra: &[String], tail: &[&str]) -> 
 fn containers_run_pinned_images_offline_and_read_only() {
     let mut fixture = Fixture::new();
     fixture.container = true;
+    fixture.local = Some(fixture.root.0.join("rules"));
     let image = format!("example/gosec@{DIGEST}");
     let boxed = fixture.one(&BOXED);
     assert_eq!(
@@ -257,7 +273,7 @@ fn containers_run_pinned_images_offline_and_read_only() {
                 "./..."
             ]
         ),
-        "docker argv"
+        "docker argv, no rules mounted for a tool without rules"
     );
     assert_eq!(
         boxed.step,
@@ -290,27 +306,41 @@ fn containers_run_pinned_images_offline_and_read_only() {
 fn containers_mount_rules_and_allow_only_database_downloads() {
     let mut fixture = Fixture::new();
     fixture.container = true;
-    fixture.rules = Some(fixture.root.0.join("my rules"));
+    fixture.local = Some(fixture.root.0.join("my rules"));
     let tool = Tool {
-        kind: Kind::NeedsRules,
-        args: &[Arg::Fixed("--config"), Arg::Rules],
+        args: &[Arg::Rules("--config")],
         sink: Sink::Stdout,
         network: Network::DatabaseDownload,
         ..BOXED
     };
     let image = format!("example/gosec@{DIGEST}");
-    let mount = format!(
-        "type=bind,source={},target=/rules,readonly",
-        fixture.root.0.join("my rules").to_string_lossy()
-    );
+    let mount = |dir: &Path, index: usize| {
+        format!(
+            "type=bind,source={},target=/rules/{index},readonly",
+            dir.to_string_lossy()
+        )
+    };
     let planned = fixture.one(&tool);
     assert_eq!(
         planned.argv,
         docker(
             &fixture,
             "bridge",
-            &strings(&["--mount", &mount]),
-            &["--entrypoint", "gosec", &image, "--config", "/rules"]
+            &strings(&[
+                "--mount",
+                &mount(&fixture.pack, 0),
+                "--mount",
+                &mount(&fixture.root.0.join("my rules"), 1)
+            ]),
+            &[
+                "--entrypoint",
+                "gosec",
+                &image,
+                "--config",
+                "/rules/0",
+                "--config",
+                "/rules/1"
+            ]
         ),
         "rules mounted read-only; network for the download"
     );

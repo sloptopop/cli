@@ -1,0 +1,39 @@
+rules:
+  - id: sloptopop.config.js-local-url
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      This URL points at localhost or a private network address and is
+      written into the code, so the deployed program talks to a machine that
+      only exists on a developer's network. Read it from configuration (an
+      environment variable), keeping this value only as the local default.
+    metadata:
+      cwe:
+        - "CWE-1051: Initialization with Hard-Coded Network Resource Configuration Data"
+      category: correctness
+      confidence: MEDIUM
+    paths:
+      exclude:
+        - "*.test.*"
+        - "*.spec.*"
+        - "*.config.*"
+        - "*.stories.*"
+        - "test/"
+        - "tests/"
+        - "__tests__/"
+        - "__mocks__/"
+        - "e2e/"
+        - "cypress/"
+        - "fixtures/"
+    patterns:
+      - pattern: '"$URL"'
+      - metavariable-regex:
+          metavariable: $URL
+          regex: ^["'`]?https?://(?:localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|\[::1\])(?::\d+)?(?:[/?#]|["'`]?$)
+      # Already configurable: the literal is only the default.
+      - pattern-not-inside: process.env.$NAME ?? $DEFAULT
+      - pattern-not-inside: process.env.$NAME || $DEFAULT
+      - pattern-not-inside: process.env[$NAME] ?? $DEFAULT
+      - pattern-not-inside: process.env[$NAME] || $DEFAULT
+      - pattern-not-inside: import.meta.env.$NAME ?? $DEFAULT
+      - pattern-not-inside: import.meta.env.$NAME || $DEFAULT
