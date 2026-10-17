@@ -1,0 +1,27 @@
+#!/bin/sh
+# Fake curl for the cli tests: no network. Echoes its arguments to stderr,
+# copies the posted file (--data-binary @<file>) to <file>.posted, and
+# answers by the URL's host:
+#   ok       writes {"answered":true} to --output, exit 0
+#   refuses  writes a JSON error to --output, exit 22 (--fail-with-body)
+#   down     writes nothing, exit 7 (could not connect)
+echo "fake-curl: $*" >&2
+out=
+data=
+url=
+while [ $# -gt 0 ]; do
+  case $1 in
+    --output) out=$2; shift ;;
+    --data-binary) data=${2#@}; shift ;;
+    --proto|--header|--user-agent) shift ;;
+    -*) ;;
+    *) url=$1 ;;
+  esac
+  shift
+done
+[ -n "$data" ] && cp "$data" "$data.posted"
+case $url in
+  http://ok*|https://ok*) printf '%s' '{"answered":true}' > "$out"; exit 0 ;;
+  http://refuses*) printf '%s' '{"error":{"code":"busy","message":"every slot is taken"}}' > "$out"; echo "curl: (22) The requested URL returned error: 503" >&2; exit 22 ;;
+  *) echo "curl: (7) Failed to connect" >&2; exit 7 ;;
+esac

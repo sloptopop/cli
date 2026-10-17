@@ -1,5 +1,8 @@
 //! `sloptopop fix`: runs `sloptopop-engine fix <path> [--apply]` and
 //! prints what was, or would be, created.
+//!
+//! Standards: SCF VPM-06 (Vulnerability Remediation Process), CHG-03
+//! (Configuration Change Control: a dry run unless `--apply`).
 
 use std::io::Write;
 

@@ -2,6 +2,9 @@
 //! tested from: methods, error codes, and JSON Schemas (draft 2020-12) of
 //! every params/result type, all derived from the Rust types of the
 //! `protocol` module.
+//!
+//! Standards: SCF TDA-08 (Technical Documentation Artifacts: the protocol
+//! description clients are generated from), NET-35.
 
 use schemars::JsonSchema;
 use schemars::generate::{SchemaGenerator, SchemaSettings};

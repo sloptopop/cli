@@ -1,5 +1,8 @@
 //! Which ecosystems a repository uses, from the manifests in its root
 //! directory (the same signals the engine uses).
+//!
+//! Standards: SCF VPM-12.2 (Breadth / Depth of Coverage For
+//! Vulnerability Scanning: the ecosystems decide which analyzers apply).
 
 use std::collections::BTreeSet;
 use std::fs;

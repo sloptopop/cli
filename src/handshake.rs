@@ -1,5 +1,8 @@
 //! The `initialize` handshake: who this binary is, which protocol version
 //! it speaks, and the params/result of the request that negotiates it.
+//!
+//! Standards: SCF NET-35 (Application Programming Interface Security:
+//! the protocol version is agreed first), TDA-08.
 
 use schemars::JsonSchema;
 use serde::Deserialize;

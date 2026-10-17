@@ -1,6 +1,9 @@
 //! Deciding, for each catalogue entry, whether and how `collect` runs it:
 //! the argument list, the program (the tool on `PATH`, or `docker` with a
 //! digest-pinned image) and where its report goes. Nothing runs here.
+//!
+//! Standards: SCF VPM-12.2 (Breadth / Depth of Coverage For
+//! Vulnerability Scanning), CFG-11 (Software Usage Restrictions).
 
 use std::collections::BTreeSet;
 use std::ffi::OsStr;

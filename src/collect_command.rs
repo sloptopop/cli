@@ -1,6 +1,9 @@
 //! `sloptopop collect`: runs the installed analyzers from the catalogue
 //! with fixed flags and writes their reports to `.sloptopop/reports/`,
 //! where `sloptopop check` (the engine) reads them.
+//!
+//! Standards: SCF VPM-12 (Vulnerability Scanning), TDA-17.1 (Static
+//! Code Analysis).
 
 use std::ffi::OsStr;
 use std::fs;

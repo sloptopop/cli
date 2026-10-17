@@ -2,6 +2,9 @@
 //! snippets (even redacted, their locations) and machine paths. The managed
 //! tools directory, which holds installed packages, is kept out the same
 //! way.
+//!
+//! Standards: SCF CFG-17.3 (Software Development Repository: reports
+//! that can hold secrets never enter version control); CWE-538.
 
 use std::fs;
 use std::io::{self, ErrorKind};

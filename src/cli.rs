@@ -1,5 +1,8 @@
 //! Command-line dispatch, kept free of process globals so every path can
 //! be tested with in-memory streams.
+//!
+//! Standards: SCF TDA-12 (Input Data Validation), TDA-12.1 (Error
+//! Handling: fixed exit codes, no process globals, never a panic).
 
 use std::ffi::OsString;
 use std::io::{self, BufRead, Write};
@@ -13,6 +16,7 @@ use crate::fix_command::fix;
 use crate::handshake::{PROTOCOL_VERSION, SERVER_VERSION};
 use crate::schema;
 use crate::server;
+use crate::transform_command::transform;
 
 /// Exit code for a usage error, matching common CLI convention.
 pub const USAGE_ERROR: u8 = 2;
@@ -45,6 +49,7 @@ pub fn run_with(
     let written = match command {
         Command::Check(path, format) => return check(locator, &path, format, stdout, stderr),
         Command::Fix(path, apply) => return fix(locator, &path, apply, stdout, stderr),
+        Command::Transform(options) => return transform(locator, &options, stdin, stdout, stderr),
         Command::Collect(options) => {
             return collect(&options, locator.path.as_deref(), stdout, stderr)
                 .unwrap_or_else(|message| usage_error(stderr, &message));

@@ -1,5 +1,8 @@
 //! Output handling shared by the engine-backed commands: reading the JSON
 //! document the engine printed and writing the result to stdout.
+//!
+//! Standards: SCF TDA-12 (Input Data Validation: the engine's output
+//! must be JSON), TDA-12.1 (Error Handling).
 
 use std::io::Write;
 

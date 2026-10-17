@@ -10,6 +10,10 @@
 //! links or bundles a tool. Every licence was read from the tool's licence
 //! file, whose address each entry records, never only from registry
 //! metadata.
+//!
+//! Standards: SCF VPM-12 (Vulnerability Scanning), CFG-13 (Open
+//! Source Software: every analyzer with its licence), CFG-11 (Software
+//! Usage Restrictions: fixed, offline flags).
 
 use std::collections::BTreeSet;
 

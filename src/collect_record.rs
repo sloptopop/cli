@@ -1,6 +1,9 @@
 //! What `collect` writes: `.sloptopop/reports/.collect.json` (hidden, so
 //! the engine never reads it as a report) and the human summary. Both are
 //! deterministic: catalogue order, no timestamps, no durations.
+//!
+//! Standards: SCF MON-09 (Content of Event Logs: what ran and how it
+//! ended, deterministic).
 
 use std::collections::BTreeSet;
 

@@ -6,6 +6,9 @@
 //! requests after `shutdown` get `INVALID_REQUEST`. The exit code is 0 if
 //! `shutdown` came first, otherwise 1. Notifications other than `exit` are
 //! ignored. Batches are not supported.
+//!
+//! Standards: SCF NET-35 (Application Programming Interface Security:
+//! requests before `initialize` are refused), TDA-12.
 
 use serde_json::{Value, json};
 

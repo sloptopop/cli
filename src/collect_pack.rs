@@ -3,6 +3,9 @@
 //! rest of it; see `rules/README.md`). `collect` writes it to [`PACK_DIR`]
 //! and passes that directory to Opengrep and Semgrep when no `--rules`
 //! directory is given, so neither tool ever falls back to registry rules.
+//!
+//! Standards: SCF TDA-17.1 (Static Code Analysis), CFG-13 (Open Source
+//! Software: sloptopop's own rules, never registry rules).
 
 use std::fs;
 use std::io::{self, ErrorKind};

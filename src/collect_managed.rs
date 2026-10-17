@@ -9,6 +9,10 @@
 //! against the pinned hashes. Until the pinned versions are installed, the
 //! entries are reported as missing with that command. The directory is
 //! ignored by git like the reports.
+//!
+//! Standards: SCF CFG-13 (Open Source Software: pinned to the last
+//! open-source release), TDA-06.5 (Software Release Integrity
+//! Verification: the package manager checks the pinned hashes), CFG-03.
 
 use std::fs;
 use std::io;

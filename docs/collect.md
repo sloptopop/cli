@@ -22,7 +22,8 @@ sloptopop check [root]
 ## What it does
 
 1. Detects the ecosystems from the manifests in the root directory (not
-   subdirectories), the same signals the engine uses:
+   subdirectories). The engine uses the same signals, except `pom.xml`,
+   `requirements*.txt` and `*.sh`, which only `collect` uses:
 
    | File in the root | Ecosystem |
    |---|---|

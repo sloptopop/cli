@@ -109,3 +109,9 @@ byte-identical document: no timestamps, no absolute paths, a fixed order.
 (the file is already there and was left alone). Changes are sorted by
 `path`.
 
+## Transformation report (preview)
+
+`sloptopop transform` (preview) writes its own report to
+`.sloptopop/transform/<run-id>/report.json`, with `SUMMARY.md` and
+`PR.md` beside it. Its schema is not published yet. See
+[commands.md](commands.md#transform-preview).

@@ -1,5 +1,8 @@
 //! Finding an installed tool on `PATH`. Nothing is ever installed or
 //! downloaded: a tool that is not there is reported as missing.
+//!
+//! Standards: SCF CFG-03 (Least Functionality: nothing is installed
+//! or downloaded).
 
 use std::env;
 use std::ffi::OsStr;

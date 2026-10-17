@@ -1,4 +1,6 @@
 //! Reporting a failure on stderr and turning it into an exit code.
+//!
+//! Standards: SCF TDA-12.1 (Error Handling).
 
 use std::io::Write;
 

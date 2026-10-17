@@ -1,0 +1,13 @@
+sloptopop CLI
+Copyright (c) 2026 Nicholas Novelle
+
+Licensed under either of the Apache License, Version 2.0 (LICENSE-APACHE)
+or the MIT license (LICENSE-MIT), at your option.
+
+The sloptopop binary is built from third-party open-source crates. Their
+licences and copyright notices are in THIRD-PARTY-NOTICES.md, which ships
+with every copy of the binary.
+
+The sloptopop CLI does not contain or link the proprietary sloptopop-engine
+binary. It starts the engine as a separate program, which comes with its
+own licence terms and notices.

@@ -1,5 +1,8 @@
 //! The command-line grammar: the usage text and parsing arguments into a
 //! [`Command`].
+//!
+//! Standards: SCF TDA-12 (Input Data Validation: only the documented
+//! grammar is accepted; anything else is a usage error).
 
 use std::ffi::OsString;
 
@@ -18,6 +21,12 @@ Commands:
                   Run the installed analyzers with fixed flags and write
                   their reports to .sloptopop/reports/ (see docs/collect.md);
                   --dry-run prints the plan without running anything
+  transform [root] [--apply] [--branch <name>] [--backend <url>] [--yes]
+            [--confirm <id,...> --by <name>] [--format text|json]
+                  Plan verified transformations with the sloptopop backend
+                  and apply them on a new branch (preview; see
+                  docs/commands.md#transform-preview); without --apply a
+                  dry run. Shows what it uploads and asks first (--yes in CI)
   serve --stdio   Run the JSON-RPC server on stdin/stdout (used by the
                   language libraries)
   schema          Print the protocol description as JSON
@@ -27,9 +36,11 @@ Options:
   -h, --help      Print this help
   -V, --version   Print the version
 
-check and fix run the separately installed sloptopop-engine, found via
-the SLOPTOPOP_ENGINE environment variable, next to this executable, or on
-PATH. Exit code 3 means the engine is missing or failed.
+check, fix and transform run the separately installed sloptopop-engine,
+found via the SLOPTOPOP_ENGINE environment variable, next to this
+executable, or on PATH. Exit code 3 means the engine is missing or failed.
+transform sends its one request with curl; exit code 4 means the upload
+was not confirmed or the backend could not be reached or refused it.
 ";
 
 /// How `check` prints the report.
@@ -56,6 +67,27 @@ pub(crate) struct CollectOptions {
     pub(crate) dry_run: bool,
 }
 
+/// The options of `transform`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TransformOptions {
+    /// The repository root (default: the current directory).
+    pub(crate) root: String,
+    /// Commit the verified steps on a branch (otherwise a dry run).
+    pub(crate) apply: bool,
+    /// The branch to make.
+    pub(crate) branch: Option<String>,
+    /// The backend's base URL.
+    pub(crate) backend: Option<String>,
+    /// Upload without asking.
+    pub(crate) yes: bool,
+    /// Attestations to confirm.
+    pub(crate) confirm: Vec<String>,
+    /// Who confirms them.
+    pub(crate) by: Option<String>,
+    /// How to print the result.
+    pub(crate) format: Format,
+}
+
 /// A parsed command line.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Command {
@@ -65,6 +97,8 @@ pub(crate) enum Command {
     Fix(String, bool),
     /// `collect [root] [--container] [--only <tool,...>] [--rules <dir>] [--dry-run]`.
     Collect(CollectOptions),
+    /// `transform [root] …`.
+    Transform(TransformOptions),
     /// `serve --stdio`.
     Serve,
     /// `schema`.
@@ -86,6 +120,7 @@ pub(crate) fn parse(args: &[OsString]) -> Result<Command, String> {
         ["check", rest @ ..] => parse_check(rest),
         ["fix", rest @ ..] => parse_fix(rest),
         ["collect", rest @ ..] => parse_collect(rest),
+        ["transform", rest @ ..] => parse_transform(rest),
         ["serve", "--stdio"] => Ok(Command::Serve),
         ["serve"] => Err("serve needs a transport: sloptopop serve --stdio".into()),
         ["schema"] => Ok(Command::Schema),
@@ -146,6 +181,52 @@ fn parse_collect(rest: &[&str]) -> Result<Command, String> {
     }
     options.root = root.unwrap_or_else(|| ".".to_owned());
     Ok(Command::Collect(options))
+}
+
+fn parse_transform(rest: &[&str]) -> Result<Command, String> {
+    let mut options = TransformOptions {
+        root: ".".to_owned(),
+        apply: false,
+        branch: None,
+        backend: None,
+        yes: false,
+        confirm: Vec::new(),
+        by: None,
+        format: Format::Text,
+    };
+    let mut root = None;
+    let mut rest = rest.iter();
+    while let Some(&arg) = rest.next() {
+        match arg {
+            "--apply" => options.apply = true,
+            "--yes" => options.yes = true,
+            "--branch" => options.branch = Some(value(arg, rest.next())?.to_owned()),
+            "--backend" => options.backend = Some(value(arg, rest.next())?.to_owned()),
+            "--by" => options.by = Some(value(arg, rest.next())?.to_owned()),
+            "--confirm" => options.confirm.extend(
+                value(arg, rest.next())?
+                    .split(',')
+                    .filter(|id| !id.is_empty())
+                    .map(str::to_owned),
+            ),
+            "--format" => {
+                options.format = match value(arg, rest.next())? {
+                    "text" => Format::Text,
+                    "json" => Format::Json,
+                    other => {
+                        return Err(format!("unknown format: {other} (expected text or json)"));
+                    }
+                };
+            }
+            path if root.is_none() => root = Some(checked_path(path)?),
+            _ => return Err(format!("unrecognised option or argument: {arg}")),
+        }
+    }
+    if options.confirm.is_empty() != options.by.is_none() {
+        return Err("--confirm and --by go together".into());
+    }
+    options.root = root.unwrap_or_else(|| ".".to_owned());
+    Ok(Command::Transform(options))
 }
 
 /// The value after `option`, which must be present and not an option.

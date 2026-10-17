@@ -2,6 +2,9 @@
 //!
 //! Only the public Report format is read; unknown fields are ignored and
 //! missing ones render as empty, so newer engines stay readable.
+//!
+//! Standards: SCF CPL-30 (Control Assurance Automation evidence
+//! integrity: findings and controls shown as the engine reported them).
 
 use std::collections::BTreeMap;
 

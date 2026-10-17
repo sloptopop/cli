@@ -1,6 +1,9 @@
 //! LSP-style message framing: `Content-Length: N\r\n\r\n` followed by an
 //! N-byte UTF-8 JSON body. Header names are case-insensitive; headers other
 //! than `Content-Length` (e.g. `Content-Type`) are accepted and ignored.
+//!
+//! Standards: SCF NET-35 (Application Programming Interface Security:
+//! a frame needs a usable `Content-Length`), TDA-12.
 
 use std::fmt;
 use std::io::{self, BufRead, Read, Write};

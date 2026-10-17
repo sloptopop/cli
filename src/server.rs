@@ -5,6 +5,9 @@
 //! requests after `shutdown` get `INVALID_REQUEST`. The process exits with
 //! 0 after `exit` if `shutdown` came first, otherwise 1. Notifications other
 //! than `exit` are ignored. Batches are not supported.
+//!
+//! Standards: SCF NET-35 (Application Programming Interface Security),
+//! TDA-12.1 (Error Handling).
 
 use std::io::{BufRead, Write};
 

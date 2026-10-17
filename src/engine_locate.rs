@@ -1,5 +1,9 @@
 //! Finding `sloptopop-engine`: through the `SLOPTOPOP_ENGINE` environment
 //! variable, then next to the `sloptopop` executable, then on `PATH`.
+//!
+//! Standards: SCF CFG-03 (Least Functionality: only the binary named
+//! `sloptopop-engine` is started, from three documented places in a
+//! fixed order).
 
 use std::env;
 use std::ffi::OsString;

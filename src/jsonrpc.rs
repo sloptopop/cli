@@ -1,5 +1,8 @@
 //! The JSON-RPC 2.0 message model: request ids, incoming messages, error
 //! objects and codes, and the success/error response envelopes.
+//!
+//! Standards: SCF NET-35 (Application Programming Interface Security),
+//! TDA-12 (malformed messages get JSON-RPC errors).
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

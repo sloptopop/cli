@@ -1,5 +1,8 @@
 //! `sloptopop check`: runs `sloptopop-engine check <path>` and prints its
 //! report.
+//!
+//! Standards: SCF TDA-17.1 (Static Code Analysis, run by the engine),
+//! TDA-12.1 (an engine that fails or prints no JSON exits 3).
 
 use std::io::Write;
 

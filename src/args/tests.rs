@@ -125,3 +125,77 @@ fn collect_rejects_bad_arguments() {
         assert_eq!(collect(args), Err(message.to_owned()), "{args:?}");
     }
 }
+
+#[test]
+fn transform_arguments_are_parsed() {
+    let parsed = |args: &[&str]| parse(&args.iter().map(OsString::from).collect::<Vec<_>>());
+    let Ok(Command::Transform(defaults)) = parsed(&["transform"]) else {
+        panic!("transform");
+    };
+    assert_eq!(
+        defaults,
+        TransformOptions {
+            root: ".".to_owned(),
+            apply: false,
+            branch: None,
+            backend: None,
+            yes: false,
+            confirm: Vec::new(),
+            by: None,
+            format: Format::Text,
+        },
+        "defaults"
+    );
+    let Ok(Command::Transform(all)) = parsed(&[
+        "transform",
+        "repo",
+        "--apply",
+        "--branch",
+        "fixes",
+        "--backend",
+        "http://192.0.2.10:8080",
+        "--yes",
+        "--confirm",
+        "att-1,,att-2",
+        "--confirm",
+        "att-3",
+        "--by",
+        "lead",
+        "--format",
+        "json",
+    ]) else {
+        panic!("all");
+    };
+    assert_eq!(
+        all,
+        TransformOptions {
+            root: "repo".to_owned(),
+            apply: true,
+            branch: Some("fixes".to_owned()),
+            backend: Some("http://192.0.2.10:8080".to_owned()),
+            yes: true,
+            confirm: vec!["att-1".to_owned(), "att-2".to_owned(), "att-3".to_owned()],
+            by: Some("lead".to_owned()),
+            format: Format::Json,
+        },
+        "every option"
+    );
+    let Ok(Command::Transform(text)) = parsed(&["transform", "--format", "text"]) else {
+        panic!("text");
+    };
+    assert_eq!(text.format, Format::Text, "text");
+    for bad in [
+        &["transform", "--format", "xml"][..],
+        &["transform", "--branch"],
+        &["transform", "--backend"],
+        &["transform", "--by"],
+        &["transform", "--confirm"],
+        &["transform", "--format"],
+        &["transform", "a", "b"],
+        &["transform", "-x"],
+        &["transform", "--confirm", "att-1"],
+        &["transform", "--by", "lead"],
+    ] {
+        assert!(parsed(bad).is_err(), "{bad:?}");
+    }
+}

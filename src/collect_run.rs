@@ -1,5 +1,8 @@
 //! Running the planned tools, each in the repository root, and recording
 //! what happened. A tool that fails is recorded; it never stops the others.
+//!
+//! Standards: SCF VPM-12 (Vulnerability Scanning), MON-09 (Content of
+//! Event Logs: each tool's outcome is recorded).
 
 use std::fs::{self, File};
 use std::io;

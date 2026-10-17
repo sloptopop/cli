@@ -1,4 +1,6 @@
 //! The `sloptopop` binary; all logic lives in the library.
+//!
+//! Standards: as `cli`: SCF TDA-12, TDA-12.1.
 
 use std::io;
 use std::process::ExitCode;

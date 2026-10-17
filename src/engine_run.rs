@@ -2,6 +2,9 @@
 //!
 //! `check` and `fix` never link the engine: they start it and read the
 //! JSON document it prints (see `docs/report-format.md`).
+//!
+//! Standards: SCF CFG-03 (Least Functionality: the engine is a separate
+//! process, never linked), TDA-12.1 (a failed start is an error).
 
 use std::io::Write;
 use std::process::{Command, Output, Stdio};

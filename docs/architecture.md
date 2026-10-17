@@ -17,7 +17,10 @@ your code ─► language library ─JSON-RPC─► sloptopop (open-source CLI) 
 - **`sloptopop-engine`** is proprietary and distributed as a binary. It runs
   locally and offline, and is light enough for small machines and CI
   containers.
-- An optional hosted service can turn a Report into a remediation plan.
+- **The sloptopop backend** (proprietary) describes the code and plans the
+  transformations for `sloptopop transform` (preview). `check`, `fix` and
+  `collect` never use it. Where it runs is to be confirmed: see
+  [What leaves your machine](safety.md#what-leaves-your-machine).
 
 Every component is deterministic: the same input produces the same output.
 
@@ -60,3 +63,20 @@ The engine never runs an analyzer. `collect` runs the installed ones from
 a checked-in catalogue with fixed flags, as separate processes, and writes
 their SARIF reports to `.sloptopop/reports/`, which `check` hands to the
 engine to read. See [collect.md](collect.md).
+
+## `transform` (preview)
+
+```
+sloptopop transform [root] [--apply] [--branch <name>] [--backend <url>] [--yes]
+                    [--confirm <id,...> --by <name>] [--format text|json]
+```
+
+`transform` starts the engine twice. `sloptopop-engine transform-request`
+runs the Detector, takes the snapshot of `HEAD` with secret values masked
+and writes the request; the CLI shows the upload manifest, asks, and
+posts the request to the backend with `curl` (the only network call, made
+by this open code); `sloptopop-engine transform` checks the answer,
+delivers the verified steps (one commit each, on a new branch, with
+`--apply`) and writes the report. See
+[commands.md](commands.md#transform-preview),
+[transformations.md](transformations.md) and [safety.md](safety.md).

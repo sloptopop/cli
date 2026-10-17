@@ -2,6 +2,9 @@
 //!
 //! Unknown fields are ignored and missing ones render as empty, so newer
 //! engines stay readable.
+//!
+//! Standards: SCF CHG-07 (Test, Validate & Document Changes: every
+//! planned or created file is listed).
 
 use serde_json::Value;
 
