@@ -33,11 +33,12 @@ if [ "$1" = transform-request ]; then
     case $2 in
         */broken) echo "error: cannot transform: the working tree has uncommitted changes" >&2; exit 3 ;;
         */garbage) echo "not json"; exit 0 ;;
+        */invalidrun) printf '%s\n' '{"run":"invalid"}'; exit 0 ;;
     esac
     dir="$2/.sloptopop/transform/0123456789abcdef"
     mkdir -p "$dir"
-    printf '%s' '{"schemaVersion":1}' > "$dir/request.json"
-    printf '%s\n' '{"schemaVersion":1,"run":"0123456789abcdef","base":"0000000000000000000000000000000000000000","request":".sloptopop/transform/0123456789abcdef/request.json","response":".sloptopop/transform/0123456789abcdef/response.json","manifest":{"files":2,"bytes":10,"requestBytes":20,"findings":1,"context":false,"masked":{"values":0,"files":[]},"excluded":{"count":0,"byReason":{},"paths":[]}}}'
+    printf '%s' '{"schemaVersion":1,"base":"0000000000000000000000000000000000000000","name":"repo","report":{"findings":[]},"files":[{"path":"src/app.ts","text":"const app = 1;\n"},{"path":"README.md","text":"Project notes\n"}]}' > "$dir/request.json"
+    printf '%s\n' '{"schemaVersion":1,"run":"0123456789abcdef","base":"0000000000000000000000000000000000000000","request":".sloptopop/transform/0123456789abcdef/request.json","response":".sloptopop/transform/0123456789abcdef/response.json","manifest":{"files":2,"bytes":29,"requestBytes":20,"findings":0,"context":false,"masked":{"values":0,"files":[]},"excluded":{"count":0,"byReason":{},"paths":[]}}}'
     exit 0
 fi
 if [ "$1" = transform ]; then

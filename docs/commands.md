@@ -141,20 +141,24 @@ What it does, in order:
    also reads analyzer reports in `.sloptopop/reports/`), takes the files
    of the commit `HEAD` points to, masks secret values, and writes the
    request to `.sloptopop/transform/<run>/request.json`.
-2. **Show and ask.** It prints what it will upload and where to stderr
+2. **Filter.** The CLI removes files without a recognized source-code
+   extension, updates the request digest and run directory, and records
+   those paths in the exclusion manifest. The filtered request is the one
+   both uploaded and later checked by the engine.
+3. **Show and ask.** It prints what it will upload and where to stderr
    (the upload manifest: files, bytes, files left out and why, secret
    values masked) and asks `Upload? [y/N]`. `--yes` uploads without asking
    (for CI). Without a yes, nothing is sent (exit code 4).
-3. **Upload.** It posts the request to `<backend>/v1/transform` with
+4. **Upload.** It posts the request to `<backend>/v1/transform` with
    `curl`, the only network call sloptopop makes. The backend describes
    the code, plans, and verifies every automated step on the snapshot.
-4. **Deliver.** `sloptopop-engine transform` checks that the answer
+5. **Deliver.** `sloptopop-engine transform` checks that the answer
    belongs to the request and to `HEAD`, lowers each verified step again
    on this machine (the Guider checks it here too, and the step is used
    only if its bytes are exactly the ones the backend verified), and with
    `--apply` commits it: one commit per step, on top of the previous one,
    on a new branch. Then it runs the Detector again on the result.
-5. **Report.** It writes `report.json`, `SUMMARY.md` and `PR.md` to
+6. **Report.** It writes `report.json`, `SUMMARY.md` and `PR.md` to
    `.sloptopop/transform/<run>/` and prints `SUMMARY.md` (or, with
    `--format json`, `report.json`).
 

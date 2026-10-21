@@ -133,12 +133,16 @@ overwrites or edits an existing one. Without `--apply` it writes nothing.
 
 What `transform` uploads, exactly:
 
-- the files of the commit, read from git: UTF-8 text files only, at most
-  1 MiB each;
-- never: binary files, symbolic links, submodules, `node_modules`,
+- the files of the commit, read from git: UTF-8 source-code text files with
+  these extensions (case-insensitive), at most 1 MiB each: `.c`, `.cc`,
+  `.cjs`, `.cpp`, `.cs`, `.cts`, `.cxx`, `.go`, `.h`, `.hpp`, `.java`,
+  `.js`, `.jsx`, `.kt`, `.kts`, `.mjs`, `.mts`, `.php`, `.ps1`, `.psm1`,
+  `.py`, `.rb`, `.rs`, `.scala`, `.sql`, `.swift`, `.ts` and `.tsx`;
+- never: files without one of those code extensions, binary files,
+  symbolic links, submodules, `node_modules`,
   `dist`, `build`, `vendor` and other dependency or build directories,
   `.sloptopop/`, and real environment files (`.env`, `.env.local`, …;
-  `.env.example` is uploaded);
+  `.env.example` is not uploaded because it is not a source-code file);
 - secret values masked: on every line where the Detector (or an analyzer
   report in `.sloptopop/reports/`) found a committed secret, each
   value-like token is replaced by `x`s of the same length before upload.
