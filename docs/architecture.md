@@ -56,13 +56,16 @@ JSON. Usage errors exit 2.
 ## `collect`
 
 ```
-sloptopop collect [root] [--container] [--only <tool,...>] [--rules <dir>] [--dry-run]
+sloptopop collect [root] [--only <tool,...>] [--rules <dir>] [--dry-run] [--offline] …
 ```
 
-The engine never runs an analyzer. `collect` runs the installed ones from
-a checked-in catalogue with fixed flags, as separate processes, and writes
-their SARIF reports to `.sloptopop/reports/`, which `check` hands to the
-engine to read. See [collect.md](collect.md).
+The engine never runs an analyzer. `collect` runs the ones that apply from
+a checked-in catalogue: each from its own container image (built by the
+open-source `sloptopop/analyzer-images` repository and pinned by digest),
+in a container runtime on your machine (Docker or Podman), with fixed
+flags, without network, the repository read-only. It writes their SARIF
+reports to `.sloptopop/reports/`, which `check` hands to the engine to
+read. See [collect.md](collect.md).
 
 ## `transform` (preview)
 

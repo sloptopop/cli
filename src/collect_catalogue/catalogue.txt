@@ -1,0 +1,1646 @@
+[
+    Tool {
+        name: "gitleaks",
+        command: "gitleaks",
+        licence: "MIT",
+        licence_files: [
+            "https://github.com/gitleaks/gitleaks/blob/v8.30.1/LICENSE",
+        ],
+        scope: CrossCutting,
+        kind: Run(
+            Image {
+                name: "analyzers/gitleaks",
+                version: "8.30.1-1",
+                digest: "sha256:464c5f5a13aa05ae98c6add4062d1a51deb4dbd1be2572fada97b2d625549510",
+                bytes: [
+                    40148139,
+                    39880487,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "dir",
+            ),
+            Fixed(
+                ".",
+            ),
+            Fixed(
+                "--redact",
+            ),
+            Fixed(
+                "--report-format",
+            ),
+            Fixed(
+                "sarif",
+            ),
+            Fixed(
+                "--report-path",
+            ),
+            Output(
+                "",
+            ),
+            Fixed(
+                "--exit-code",
+            ),
+            Fixed(
+                "0",
+            ),
+        ],
+        host: Same,
+        output: "gitleaks.sarif",
+        sink: PathArgument,
+        findings: [],
+        convert: None,
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "gitleaks-history",
+        command: "gitleaks",
+        licence: "MIT",
+        licence_files: [
+            "https://github.com/gitleaks/gitleaks/blob/v8.30.1/LICENSE",
+        ],
+        scope: CrossCutting,
+        kind: NeedsGit(
+            Image {
+                name: "analyzers/gitleaks",
+                version: "8.30.1-1",
+                digest: "sha256:464c5f5a13aa05ae98c6add4062d1a51deb4dbd1be2572fada97b2d625549510",
+                bytes: [
+                    40148139,
+                    39880487,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "git",
+            ),
+            Fixed(
+                ".",
+            ),
+            Fixed(
+                "--redact",
+            ),
+            Fixed(
+                "--report-format",
+            ),
+            Fixed(
+                "sarif",
+            ),
+            Fixed(
+                "--report-path",
+            ),
+            Output(
+                "",
+            ),
+            Fixed(
+                "--exit-code",
+            ),
+            Fixed(
+                "0",
+            ),
+        ],
+        host: Same,
+        output: "gitleaks.history.sarif",
+        sink: PathArgument,
+        findings: [],
+        convert: None,
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "osv-scanner",
+        command: "osv-scanner",
+        licence: "Apache-2.0",
+        licence_files: [
+            "https://github.com/google/osv-scanner/blob/v2.7.0/LICENSE",
+        ],
+        scope: CrossCutting,
+        kind: Run(
+            Image {
+                name: "analyzers/osv-scanner",
+                version: "2.7.0-1",
+                digest: "sha256:2b5de71b5330d0cc587afe24121030ff05a377000147636661aa708d1bdf5c7f",
+                bytes: [
+                    22209890,
+                    20377564,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "scan",
+            ),
+            Fixed(
+                "source",
+            ),
+            Fixed(
+                "-r",
+            ),
+            Fixed(
+                "--offline",
+            ),
+            Fixed(
+                "--format",
+            ),
+            Fixed(
+                "sarif",
+            ),
+            Fixed(
+                ".",
+            ),
+        ],
+        host: Args(
+            [
+                Fixed(
+                    "scan",
+                ),
+                Fixed(
+                    "source",
+                ),
+                Fixed(
+                    "-r",
+                ),
+                Fixed(
+                    "--offline-vulnerabilities",
+                ),
+                Fixed(
+                    "--download-offline-databases",
+                ),
+                Fixed(
+                    "--format",
+                ),
+                Fixed(
+                    "sarif",
+                ),
+                Fixed(
+                    ".",
+                ),
+            ],
+        ),
+        output: "osv-scanner.sarif",
+        sink: Stdout,
+        findings: [
+            1,
+            128,
+        ],
+        convert: None,
+        env: [
+            (
+                "OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY",
+                "/db",
+            ),
+        ],
+        prepare: None,
+        data: Some(
+            Osv,
+        ),
+    },
+    Tool {
+        name: "opengrep",
+        command: "opengrep",
+        licence: "LGPL-2.1-only",
+        licence_files: [
+            "https://github.com/opengrep/opengrep/blob/v1.31.0/LICENSE",
+        ],
+        scope: CrossCutting,
+        kind: Run(
+            Image {
+                name: "analyzers/opengrep",
+                version: "1.31.0-1",
+                digest: "sha256:ee955c93d35285d47ae77672516b4acaf998890ff56d4fb04f4ab9ea909c6614",
+                bytes: [
+                    52293400,
+                    53856303,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "scan",
+            ),
+            Fixed(
+                "--sarif",
+            ),
+            Fixed(
+                "--no-rewrite-rule-ids",
+            ),
+            Rules(
+                "--config",
+            ),
+            Fixed(
+                ".",
+            ),
+        ],
+        host: Same,
+        output: "opengrep.sarif",
+        sink: Stdout,
+        findings: [],
+        convert: None,
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "semgrep",
+        command: "semgrep",
+        licence: "LGPL-2.1-only",
+        licence_files: [
+            "https://github.com/semgrep/semgrep/blob/v1.181.0/LICENSE",
+        ],
+        scope: CrossCutting,
+        kind: Run(
+            Image {
+                name: "analyzers/semgrep",
+                version: "1.181.0-1",
+                digest: "sha256:f330febd84d4d97e1cc49821a2a71e04c3074d5af850d9e2bb520c98e03f735f",
+                bytes: [
+                    128896632,
+                    131620775,
+                ],
+            },
+        ),
+        default: false,
+        args: [
+            Fixed(
+                "scan",
+            ),
+            Fixed(
+                "--sarif",
+            ),
+            Fixed(
+                "--metrics",
+            ),
+            Fixed(
+                "off",
+            ),
+            Fixed(
+                "--disable-version-check",
+            ),
+            Fixed(
+                "--no-rewrite-rule-ids",
+            ),
+            Rules(
+                "--config",
+            ),
+            Fixed(
+                ".",
+            ),
+        ],
+        host: Same,
+        output: "semgrep.sarif",
+        sink: Stdout,
+        findings: [],
+        convert: None,
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "bandit",
+        command: "bandit",
+        licence: "Apache-2.0",
+        licence_files: [
+            "https://github.com/PyCQA/bandit/blob/1.9.4/LICENSE",
+        ],
+        scope: Only(
+            Python,
+        ),
+        kind: Run(
+            Image {
+                name: "analyzers/bandit",
+                version: "1.9.4-1",
+                digest: "sha256:18e13cb5ac47c5ac2d5805cf125ef7132eb5d35cf79f2641c5300c61af7c5f9b",
+                bytes: [
+                    46386282,
+                    46612862,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "-r",
+            ),
+            Fixed(
+                ".",
+            ),
+            Fixed(
+                "-f",
+            ),
+            Fixed(
+                "sarif",
+            ),
+            Fixed(
+                "-o",
+            ),
+            Output(
+                "",
+            ),
+        ],
+        host: Same,
+        output: "bandit.sarif",
+        sink: PathArgument,
+        findings: [
+            1,
+        ],
+        convert: None,
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "gosec",
+        command: "gosec",
+        licence: "Apache-2.0",
+        licence_files: [
+            "https://github.com/securego/gosec/blob/v2.29.0/LICENSE.txt",
+        ],
+        scope: Only(
+            Go,
+        ),
+        kind: Run(
+            Image {
+                name: "analyzers/gosec",
+                version: "2.29.0-1",
+                digest: "sha256:029df028c1d82cb14396077738d090cff2166f9eca97d172efcad21f86a7a4f5",
+                bytes: [
+                    103214933,
+                    98601993,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "-fmt",
+            ),
+            Fixed(
+                "sarif",
+            ),
+            Fixed(
+                "-out",
+            ),
+            Output(
+                "",
+            ),
+            Fixed(
+                "./...",
+            ),
+        ],
+        host: Same,
+        output: "gosec.sarif",
+        sink: PathArgument,
+        findings: [
+            1,
+        ],
+        convert: None,
+        env: [],
+        prepare: Some(
+            GoModules,
+        ),
+        data: None,
+    },
+    Tool {
+        name: "govulncheck",
+        command: "govulncheck",
+        licence: "BSD-3-Clause",
+        licence_files: [
+            "https://github.com/golang/vuln/blob/v1.1.4/LICENSE",
+        ],
+        scope: Only(
+            Go,
+        ),
+        kind: Run(
+            Image {
+                name: "analyzers/govulncheck",
+                version: "1.1.4-1",
+                digest: "sha256:d1fc9f1571046846b8a906ac84b793c0c67947d6cea8af56a78d6c674c75b551",
+                bytes: [
+                    84169744,
+                    80293194,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "-db",
+            ),
+            Fixed(
+                "file:///db/govulndb",
+            ),
+            Fixed(
+                "-format",
+            ),
+            Fixed(
+                "sarif",
+            ),
+            Fixed(
+                "./...",
+            ),
+        ],
+        host: Args(
+            [
+                Fixed(
+                    "-format",
+                ),
+                Fixed(
+                    "sarif",
+                ),
+                Fixed(
+                    "./...",
+                ),
+            ],
+        ),
+        output: "govulncheck.sarif",
+        sink: Stdout,
+        findings: [
+            3,
+        ],
+        convert: None,
+        env: [],
+        prepare: Some(
+            GoModules,
+        ),
+        data: Some(
+            GoVuln,
+        ),
+    },
+    Tool {
+        name: "ruff",
+        command: "ruff",
+        licence: "MIT",
+        licence_files: [
+            "https://github.com/astral-sh/ruff/blob/0.17.1/LICENSE",
+        ],
+        scope: Only(
+            Python,
+        ),
+        kind: Run(
+            Image {
+                name: "analyzers/ruff",
+                version: "0.17.1-1",
+                digest: "sha256:9bc033618a3f3e9b3a16fd027a9ce3196e241ff5d20443f1a16675fce4305138",
+                bytes: [
+                    11570832,
+                    10938906,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "check",
+            ),
+            Fixed(
+                "--output-format",
+            ),
+            Fixed(
+                "sarif",
+            ),
+            Fixed(
+                "--output-file",
+            ),
+            Output(
+                "",
+            ),
+            Fixed(
+                "--no-cache",
+            ),
+            Fixed(
+                "--extend-select",
+            ),
+            Fixed(
+                "S110,S501,N999",
+            ),
+            Fixed(
+                ".",
+            ),
+        ],
+        host: Same,
+        output: "ruff.sarif",
+        sink: PathArgument,
+        findings: [
+            1,
+        ],
+        convert: None,
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "pylint-cyclic-import",
+        command: "pylint",
+        licence: "GPL-2.0-or-later",
+        licence_files: [
+            "https://github.com/pylint-dev/pylint/blob/v4.1.3/LICENSE",
+        ],
+        scope: Only(
+            Python,
+        ),
+        kind: Run(
+            Image {
+                name: "analyzers/pylint",
+                version: "4.1.3-2",
+                digest: "sha256:3187804fb9f0f15017780a72d9a2f87d9c8dcb918b0933af4965d84cb22a424a",
+                bytes: [
+                    45570074,
+                    44345745,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "--disable=all",
+            ),
+            Fixed(
+                "--enable=cyclic-import",
+            ),
+            Fixed(
+                "--output-format=json2",
+            ),
+            Fixed(
+                "--recursive=y",
+            ),
+            Fixed(
+                "--exit-zero",
+            ),
+            Fixed(
+                ".",
+            ),
+        ],
+        host: Same,
+        output: "pylint-cyclic-import.sarif",
+        sink: Stdout,
+        findings: [],
+        convert: Some(
+            (
+                Pylint,
+                "pylint-cyclic-import.json",
+            ),
+        ),
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "oxlint",
+        command: "oxlint",
+        licence: "MIT",
+        licence_files: [
+            "https://github.com/oxc-project/oxc/blob/oxlint_v1.88.0/LICENSE",
+        ],
+        scope: Only(
+            Node,
+        ),
+        kind: Run(
+            Image {
+                name: "analyzers/oxlint",
+                version: "1.88.0-1",
+                digest: "sha256:dde16007e5c8e53707ff61899799fa6dca785d58b4bd1173dda62d15ff6ba278",
+                bytes: [
+                    7492467,
+                    7020202,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "--format",
+            ),
+            Fixed(
+                "sarif",
+            ),
+            Fixed(
+                ".",
+            ),
+        ],
+        host: Same,
+        output: "oxlint.sarif",
+        sink: Stdout,
+        findings: [
+            1,
+        ],
+        convert: None,
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "biome",
+        command: "biome",
+        licence: "MIT OR Apache-2.0",
+        licence_files: [
+            "https://github.com/biomejs/biome/blob/@biomejs/biome@2.5.15/LICENSE-MIT",
+            "https://github.com/biomejs/biome/blob/@biomejs/biome@2.5.15/LICENSE-APACHE",
+        ],
+        scope: Only(
+            Node,
+        ),
+        kind: Run(
+            Image {
+                name: "analyzers/biome",
+                version: "2.5.15-1",
+                digest: "sha256:0b298de6fcb4fab406a7b21390c53ae598eaa106c6e00361f5e6c390e4968c4c",
+                bytes: [
+                    25810227,
+                    24210701,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "lint",
+            ),
+            Fixed(
+                "--reporter=sarif",
+            ),
+            Fixed(
+                ".",
+            ),
+        ],
+        host: Same,
+        output: "biome.sarif",
+        sink: Stdout,
+        findings: [
+            1,
+        ],
+        convert: None,
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "eslint-sonarjs",
+        command: "eslint",
+        licence: "LGPL-3.0-only",
+        licence_files: [
+            "https://registry.npmjs.org/eslint-plugin-sonarjs/-/eslint-plugin-sonarjs-2.0.4.tgz#package/LICENSE",
+        ],
+        scope: Only(
+            Node,
+        ),
+        kind: Run(
+            Image {
+                name: "analyzers/eslint-sonarjs",
+                version: "2.0.4-1",
+                digest: "sha256:71327a7bcad1d2d6ba138f461f48c438852fa1b17511bddb166d23b83998ee13",
+                bytes: [
+                    107709256,
+                    108049408,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "--config",
+            ),
+            Fixed(
+                "/opt/eslint-sonarjs/eslint.config.mjs",
+            ),
+            Fixed(
+                "--no-inline-config",
+            ),
+            Fixed(
+                "--no-error-on-unmatched-pattern",
+            ),
+            Fixed(
+                "--format",
+            ),
+            Fixed(
+                "/opt/eslint-sonarjs/node_modules/@microsoft/eslint-formatter-sarif/sarif.js",
+            ),
+            Fixed(
+                "--output-file",
+            ),
+            Output(
+                "",
+            ),
+            Fixed(
+                ".",
+            ),
+        ],
+        host: ImageOnly,
+        output: "eslint-sonarjs.sarif",
+        sink: PathArgument,
+        findings: [
+            1,
+        ],
+        convert: None,
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "eslint-sonarjs-json",
+        command: "eslint",
+        licence: "LGPL-3.0-only",
+        licence_files: [
+            "https://registry.npmjs.org/eslint-plugin-sonarjs/-/eslint-plugin-sonarjs-2.0.4.tgz#package/LICENSE",
+        ],
+        scope: Only(
+            Node,
+        ),
+        kind: Run(
+            Image {
+                name: "analyzers/eslint-sonarjs",
+                version: "2.0.4-1",
+                digest: "sha256:71327a7bcad1d2d6ba138f461f48c438852fa1b17511bddb166d23b83998ee13",
+                bytes: [
+                    107709256,
+                    108049408,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "--config",
+            ),
+            Fixed(
+                "/opt/eslint-sonarjs/eslint.config.mjs",
+            ),
+            Fixed(
+                "--no-inline-config",
+            ),
+            Fixed(
+                "--no-error-on-unmatched-pattern",
+            ),
+            Fixed(
+                "--format",
+            ),
+            Fixed(
+                "json-with-metadata",
+            ),
+            Fixed(
+                "--output-file",
+            ),
+            Output(
+                "",
+            ),
+            Fixed(
+                ".",
+            ),
+        ],
+        host: ImageOnly,
+        output: "eslint-sonarjs.json",
+        sink: PathArgument,
+        findings: [
+            1,
+        ],
+        convert: None,
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "eslint-typescript",
+        command: "eslint",
+        licence: "MIT",
+        licence_files: [
+            "https://github.com/eslint/eslint/blob/v9.39.5/LICENSE",
+            "https://github.com/typescript-eslint/typescript-eslint/blob/v8.71.2/LICENSE",
+        ],
+        scope: Only(
+            Node,
+        ),
+        kind: Run(
+            Image {
+                name: "analyzers/eslint-typescript",
+                version: "8.71.2-1",
+                digest: "sha256:996e45f60992b17a1f0ec3dd85d8302d8b1ba86e1d80028985b1f46f18308c79",
+                bytes: [
+                    95199267,
+                    95539419,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "--config",
+            ),
+            Fixed(
+                "/opt/eslint-typescript/eslint.config.mjs",
+            ),
+            Fixed(
+                "--no-inline-config",
+            ),
+            Fixed(
+                "--no-error-on-unmatched-pattern",
+            ),
+            Fixed(
+                "--format",
+            ),
+            Fixed(
+                "/opt/eslint-typescript/node_modules/@microsoft/eslint-formatter-sarif/sarif.js",
+            ),
+            Fixed(
+                "--output-file",
+            ),
+            Output(
+                "",
+            ),
+            Fixed(
+                ".",
+            ),
+        ],
+        host: ImageOnly,
+        output: "eslint-typescript.sarif",
+        sink: PathArgument,
+        findings: [
+            1,
+        ],
+        convert: None,
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "dependency-cruiser",
+        command: "depcruise",
+        licence: "MIT",
+        licence_files: [
+            "https://github.com/sverweij/dependency-cruiser/blob/v18.6.0/LICENSE",
+        ],
+        scope: Only(
+            Node,
+        ),
+        kind: Run(
+            Image {
+                name: "analyzers/dependency-cruiser",
+                version: "18.6.0-1",
+                digest: "sha256:09d194868d77131b245be1b5545464ff7ddec47a10d90acdd35610534d9a2f4f",
+                bytes: [
+                    88276477,
+                    88616628,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "--no-progress",
+            ),
+            Fixed(
+                "--config",
+            ),
+            Fixed(
+                "/opt/dependency-cruiser/depcruise.cjs",
+            ),
+            Fixed(
+                "--output-type",
+            ),
+            Fixed(
+                "json",
+            ),
+            Fixed(
+                ".",
+            ),
+        ],
+        host: ImageOnly,
+        output: "dependency-cruiser.sarif",
+        sink: Stdout,
+        findings: [],
+        convert: Some(
+            (
+                Depcruise,
+                "dependency-cruiser.json",
+            ),
+        ),
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "staticcheck",
+        command: "staticcheck",
+        licence: "MIT",
+        licence_files: [
+            "https://github.com/dominikh/go-tools/blob/2026.2.2/LICENSE",
+        ],
+        scope: Only(
+            Go,
+        ),
+        kind: Run(
+            Image {
+                name: "analyzers/staticcheck",
+                version: "2026.2.2-1",
+                digest: "sha256:6ff246f23f3315ba4da366078cc83b0d5648e5f190fa538896e0f146231ff165",
+                bytes: [
+                    84786385,
+                    80842045,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "-f",
+            ),
+            Fixed(
+                "sarif",
+            ),
+            Fixed(
+                "./...",
+            ),
+        ],
+        host: Same,
+        output: "staticcheck.sarif",
+        sink: Stdout,
+        findings: [
+            1,
+        ],
+        convert: None,
+        env: [],
+        prepare: Some(
+            GoModules,
+        ),
+        data: None,
+    },
+    Tool {
+        name: "golangci-lint",
+        command: "golangci-lint",
+        licence: "GPL-3.0-only",
+        licence_files: [
+            "https://github.com/golangci/golangci-lint/blob/v2.14.0/LICENSE",
+        ],
+        scope: Only(
+            Go,
+        ),
+        kind: Run(
+            Image {
+                name: "analyzers/golangci-lint",
+                version: "2.14.0-1",
+                digest: "sha256:9c1dce300769edcdc0feaa01508ad834e7a9d685b670f4d0bb1a259c38909350",
+                bytes: [
+                    90876823,
+                    86373864,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "run",
+            ),
+            Fixed(
+                "--max-issues-per-linter=0",
+            ),
+            Fixed(
+                "--max-same-issues=0",
+            ),
+            Fixed(
+                "--uniq-by-line=false",
+            ),
+            Output(
+                "--output.sarif.path=",
+            ),
+            Fixed(
+                "./...",
+            ),
+        ],
+        host: Same,
+        output: "golangci.sarif",
+        sink: PathArgument,
+        findings: [
+            1,
+        ],
+        convert: None,
+        env: [],
+        prepare: Some(
+            GoModules,
+        ),
+        data: None,
+    },
+    Tool {
+        name: "swiftlint",
+        command: "swiftlint",
+        licence: "MIT",
+        licence_files: [
+            "https://github.com/realm/SwiftLint/blob/0.65.1/LICENSE",
+        ],
+        scope: Only(
+            Swift,
+        ),
+        kind: Run(
+            Image {
+                name: "analyzers/swiftlint",
+                version: "0.65.1-2",
+                digest: "sha256:398cb703a29bfca494cb009040e1a7dd2a4227fb62aaf4f34e11ef1d7af42d4c",
+                bytes: [
+                    276061429,
+                    273565369,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "lint",
+            ),
+            Fixed(
+                "--quiet",
+            ),
+            Fixed(
+                "--no-cache",
+            ),
+            Fixed(
+                "--reporter",
+            ),
+            Fixed(
+                "sarif",
+            ),
+        ],
+        host: Same,
+        output: "swiftlint.sarif",
+        sink: Stdout,
+        findings: [
+            2,
+        ],
+        convert: None,
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "sonaranalyzer-csharp",
+        command: "dotnet",
+        licence: "LGPL-3.0-only",
+        licence_files: [
+            "https://github.com/SonarSource/sonar-dotnet/blob/9.32.0.97167/LICENSE.txt",
+            "https://api.nuget.org/v3-flatcontainer/sonaranalyzer.csharp/9.32.0.97167/sonaranalyzer.csharp.9.32.0.97167.nupkg#SonarAnalyzer.CSharp.nuspec",
+        ],
+        scope: Only(
+            Dotnet,
+        ),
+        kind: Run(
+            Image {
+                name: "analyzers/sonaranalyzer-csharp",
+                version: "9.32.0.97167-1",
+                digest: "sha256:0bbbb5fc22d11bebc4e799b84463f3b1a28f4f2be7413d2f74203a80aabe6e36",
+                bytes: [
+                    352298027,
+                    344174207,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "build",
+            ),
+            Fixed(
+                "--no-restore",
+            ),
+            Fixed(
+                "--no-incremental",
+            ),
+            Fixed(
+                "-p:TreatWarningsAsErrors=false",
+            ),
+            Fixed(
+                "-p:DirectoryBuildPropsPath=/opt/sonaranalyzer-csharp/Directory.Build.props",
+            ),
+        ],
+        host: ImageOnly,
+        output: "sonaranalyzer-csharp.*.sarif",
+        sink: Config,
+        findings: [],
+        convert: None,
+        env: [],
+        prepare: Some(
+            DotnetRestore,
+        ),
+        data: None,
+    },
+    Tool {
+        name: "scorecard-license",
+        command: "scorecard",
+        licence: "Apache-2.0",
+        licence_files: [
+            "https://github.com/ossf/scorecard/blob/v5.6.0/LICENSE",
+        ],
+        scope: CrossCutting,
+        kind: Run(
+            Image {
+                name: "analyzers/scorecard",
+                version: "5.6.0-1",
+                digest: "sha256:7137e3ed0782e1c63e4d085e62e688a76272db9e7335d51ae4d913897c22265b",
+                bytes: [
+                    27996640,
+                    25667460,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "--local=.",
+            ),
+            Fixed(
+                "--checks=License",
+            ),
+            Fixed(
+                "--format=json",
+            ),
+        ],
+        host: Same,
+        output: "scorecard-license.sarif",
+        sink: Stdout,
+        findings: [],
+        convert: Some(
+            (
+                Scorecard,
+                "scorecard-license.json",
+            ),
+        ),
+        env: [
+            (
+                "GITHUB_AUTH_TOKEN",
+                "unused-in-local-mode",
+            ),
+        ],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "jscpd",
+        command: "jscpd",
+        licence: "MIT",
+        licence_files: [
+            "https://github.com/kucherenko/jscpd/blob/v5.4.1/LICENSE",
+        ],
+        scope: CrossCutting,
+        kind: Run(
+            Image {
+                name: "analyzers/jscpd",
+                version: "5.4.1-1",
+                digest: "sha256:aff4ae3c4a8c9dd8318520bb44a1a8a8fb3c4876d2f8ad30770862e452b2cc7a",
+                bytes: [
+                    92318757,
+                    92350072,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "--reporters",
+            ),
+            Fixed(
+                "sarif",
+            ),
+            ReportsDir(
+                "--output=",
+            ),
+            Fixed(
+                "--report-name",
+            ),
+            Fixed(
+                "jscpd",
+            ),
+            Fixed(
+                "--min-lines",
+            ),
+            Fixed(
+                "5",
+            ),
+            Fixed(
+                "--workers",
+            ),
+            Fixed(
+                "1",
+            ),
+            Fixed(
+                "--silent",
+            ),
+            Fixed(
+                "--no-tips",
+            ),
+            Fixed(
+                "--ignore",
+            ),
+            Fixed(
+                "**/.sloptopop/**,**/node_modules/**",
+            ),
+            Fixed(
+                ".",
+            ),
+        ],
+        host: ImageOnly,
+        output: "jscpd.sarif",
+        sink: PathArgument,
+        findings: [],
+        convert: None,
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "phpcs",
+        command: "phpcs",
+        licence: "BSD-3-Clause",
+        licence_files: [
+            "https://github.com/PHPCSStandards/PHP_CodeSniffer/blob/4.0.4/licence.txt",
+        ],
+        scope: Only(
+            Php,
+        ),
+        kind: Run(
+            Image {
+                name: "analyzers/phpcs",
+                version: "4.0.4-1",
+                digest: "sha256:028e8040f01f0f5d13b56f1c031620b1ede0a299638ed56bb97627f05160f121",
+                bytes: [
+                    185704480,
+                    177865741,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "--standard=Squiz,Generic",
+            ),
+            Fixed(
+                "--sniffs=Squiz.Classes.ClassFileName,Generic.CodeAnalysis.EmptyStatement",
+            ),
+            Fixed(
+                "--extensions=php",
+            ),
+            Fixed(
+                "--report=json",
+            ),
+            Fixed(
+                "--no-cache",
+            ),
+            Fixed(
+                "-q",
+            ),
+            Fixed(
+                ".",
+            ),
+        ],
+        host: Same,
+        output: "phpcs.sarif",
+        sink: Stdout,
+        findings: [
+            1,
+            2,
+            3,
+        ],
+        convert: Some(
+            (
+                Phpcs,
+                "phpcs.json",
+            ),
+        ),
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "pmd",
+        command: "pmd",
+        licence: "BSD-3-Clause",
+        licence_files: [
+            "https://github.com/pmd/pmd/blob/pmd_releases/7.28.0/LICENSE",
+        ],
+        scope: Only(
+            Jvm,
+        ),
+        kind: Run(
+            Image {
+                name: "analyzers/pmd",
+                version: "7.28.0-1",
+                digest: "sha256:2835550be91a2171b34961e01ed4274679b70cc84bc46f56a702bdf3d36b60d1",
+                bytes: [
+                    248410133,
+                    246352770,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "check",
+            ),
+            Fixed(
+                "--no-cache",
+            ),
+            Fixed(
+                "--no-progress",
+            ),
+            Fixed(
+                "-d",
+            ),
+            Fixed(
+                ".",
+            ),
+            Fixed(
+                "-R",
+            ),
+            Fixed(
+                "category/java/errorprone.xml/EmptyCatchBlock",
+            ),
+            Fixed(
+                "-f",
+            ),
+            Fixed(
+                "sarif",
+            ),
+            Fixed(
+                "-r",
+            ),
+            Output(
+                "",
+            ),
+        ],
+        host: Same,
+        output: "pmd.sarif",
+        sink: PathArgument,
+        findings: [
+            4,
+        ],
+        convert: None,
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "detekt",
+        command: "detekt",
+        licence: "Apache-2.0",
+        licence_files: [
+            "https://github.com/detekt/detekt/blob/v1.23.8/LICENSE",
+        ],
+        scope: Only(
+            Jvm,
+        ),
+        kind: Run(
+            Image {
+                name: "analyzers/detekt",
+                version: "1.23.8-1",
+                digest: "sha256:a5125bc6d9fae36e2508fd6f932c9ce97c393ced28bdda9a060b7f3b787edc89",
+                bytes: [
+                    179773093,
+                    177715729,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "--input",
+            ),
+            Fixed(
+                ".",
+            ),
+            Fixed(
+                "--config",
+            ),
+            Fixed(
+                "/opt/detekt/sloptopop.yml",
+            ),
+            Fixed(
+                "--report",
+            ),
+            Output(
+                "sarif:",
+            ),
+        ],
+        host: ImageOnly,
+        output: "detekt.sarif",
+        sink: PathArgument,
+        findings: [
+            2,
+        ],
+        convert: None,
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "clang-tidy",
+        command: "sloptopop-clang-tidy",
+        licence: "Apache-2.0 WITH LLVM-exception",
+        licence_files: [
+            "https://github.com/llvm/llvm-project/blob/llvmorg-19.1.0/clang-tools-extra/LICENSE.TXT",
+        ],
+        scope: Only(
+            Cpp,
+        ),
+        kind: Run(
+            Image {
+                name: "analyzers/clang-tidy",
+                version: "19.1.0-1",
+                digest: "sha256:6c12730b2a734cbe2430b8dcef41b2bd9c4a636dbdec716ca6f6a478db28b5d3",
+                bytes: [
+                    68524962,
+                    68624873,
+                ],
+            },
+        ),
+        default: true,
+        args: [
+            Fixed(
+                "-*,bugprone-empty-catch",
+            ),
+        ],
+        host: ImageOnly,
+        output: "clang-tidy.sarif",
+        sink: Stdout,
+        findings: [],
+        convert: Some(
+            (
+                ClangTidy,
+                "clang-tidy.txt",
+            ),
+        ),
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "cargo-llvm-cov",
+        command: "cargo",
+        licence: "Apache-2.0 OR MIT",
+        licence_files: [
+            "https://github.com/taiki-e/cargo-llvm-cov/blob/v0.9.1/LICENSE-APACHE",
+            "https://github.com/taiki-e/cargo-llvm-cov/blob/v0.9.1/LICENSE-MIT",
+        ],
+        scope: Only(
+            Rust,
+        ),
+        kind: Documented,
+        default: true,
+        args: [
+            Fixed(
+                "llvm-cov",
+            ),
+            Fixed(
+                "--lcov",
+            ),
+            Fixed(
+                "--output-path",
+            ),
+            Output(
+                "",
+            ),
+        ],
+        host: Same,
+        output: "cargo.lcov",
+        sink: PathArgument,
+        findings: [],
+        convert: None,
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "coverage.py",
+        command: "coverage",
+        licence: "Apache-2.0",
+        licence_files: [
+            "https://github.com/nedbat/coveragepy/blob/7.16.2/LICENSE.txt",
+        ],
+        scope: Only(
+            Python,
+        ),
+        kind: Documented,
+        default: true,
+        args: [
+            Fixed(
+                "lcov",
+            ),
+            Fixed(
+                "-o",
+            ),
+            Output(
+                "",
+            ),
+        ],
+        host: Same,
+        output: "python.lcov",
+        sink: PathArgument,
+        findings: [],
+        convert: None,
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "c8",
+        command: "c8",
+        licence: "ISC",
+        licence_files: [
+            "https://github.com/bcoe/c8/blob/v12.0.0/LICENSE.txt",
+        ],
+        scope: Only(
+            Node,
+        ),
+        kind: Documented,
+        default: true,
+        args: [
+            Fixed(
+                "--reporter=lcov",
+            ),
+            ReportsDir(
+                "--reports-dir=",
+            ),
+            Fixed(
+                "npm",
+            ),
+            Fixed(
+                "test",
+            ),
+        ],
+        host: Same,
+        output: "lcov.info",
+        sink: PathArgument,
+        findings: [],
+        convert: None,
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "coverlet",
+        command: "dotnet",
+        licence: "MIT",
+        licence_files: [
+            "https://github.com/coverlet-coverage/coverlet/blob/v10.1.0/LICENSE",
+        ],
+        scope: Only(
+            Dotnet,
+        ),
+        kind: Documented,
+        default: true,
+        args: [
+            Fixed(
+                "test",
+            ),
+            Fixed(
+                "/p:CollectCoverage=true",
+            ),
+            Fixed(
+                "/p:CoverletOutputFormat=lcov",
+            ),
+            Output(
+                "/p:CoverletOutput=",
+            ),
+        ],
+        host: Same,
+        output: "dotnet.lcov",
+        sink: PathArgument,
+        findings: [],
+        convert: None,
+        env: [],
+        prepare: None,
+        data: None,
+    },
+    Tool {
+        name: "gcovr",
+        command: "gcovr",
+        licence: "BSD-3-Clause",
+        licence_files: [
+            "https://github.com/gcovr/gcovr/blob/8.6/LICENSE.txt",
+        ],
+        scope: Only(
+            Cpp,
+        ),
+        kind: Documented,
+        default: true,
+        args: [
+            Fixed(
+                "--lcov",
+            ),
+            Output(
+                "",
+            ),
+        ],
+        host: Same,
+        output: "cpp.lcov",
+        sink: PathArgument,
+        findings: [],
+        convert: None,
+        env: [],
+        prepare: None,
+        data: None,
+    },
+]

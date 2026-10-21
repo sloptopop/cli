@@ -31,8 +31,8 @@ too; do not copy or adapt registry rules.
 | `sloptopop.errors.python-except-pass` | Python | `except: pass`, `except Exception: pass`, `except BaseException: pass` | CWE-390 | no |
 | `sloptopop.errors.go-empty-err-check` | Go | an empty `if err != nil { }`, also with an init statement | CWE-390 | no |
 | `sloptopop.supabase.unchecked-write` | JS, TS | a supabase-js `insert`, `update`, `upsert` or `delete` whose result is dropped (`await …;`) or destructured without `error` | CWE-252 | appends `.throwOnError()` |
-| `sloptopop.config.js-local-url` | JS, TS | a `localhost`, loopback or private-network URL literal outside tests and config files, unless it is the default of `process.env.X ?? …` | CWE-1051 | no |
-| `sloptopop.config.python-local-url` | Python | the same, unless it is the default of `os.environ.get(…, …)` or `os.getenv(…) or …` | CWE-1051 | no |
+| `sloptopop.config.js-local-url` | JS, TS | a `localhost`, loopback or private-network URL literal outside tests and config files, unless it is the default of an environment variable (`process.env.X ?? …`, `process.env.X?.trim() || …`, the last branch of `process.env.X ? … : …`) or opens no connection (compared, logged, a `new Request(…)` key) | CWE-1051 | no |
+| `sloptopop.config.python-local-url` | Python | the same, unless it is the default of `os.environ.get(…, …)`, `os.getenv(…) or …` or a field of a pydantic `BaseSettings` class | CWE-1051 | no |
 | `sloptopop.config.go-local-url` | Go | the same, outside `_test.go` files | CWE-1051 | no |
 | `sloptopop.tls.js-reject-unauthorized` | JS, TS | `rejectUnauthorized: false`, `NODE_TLS_REJECT_UNAUTHORIZED = "0"` | CWE-295 | no |
 | `sloptopop.tls.python-verify-false` | Python | `verify=False`, `ssl._create_unverified_context()` | CWE-295 | no |

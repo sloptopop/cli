@@ -8,8 +8,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde_json::{Value, json};
 
-use crate::collect_catalogue::Inputs;
-use crate::collect_managed::{Managed, Registry, TOOLS_DIR};
+use std::ffi::OsString;
+
+use crate::collect_catalogue::{CATALOGUE, Kind};
 use crate::engine_locate::Locator;
 use crate::handshake::PROTOCOL_VERSION;
 
@@ -66,43 +67,28 @@ pub(crate) fn fake_tools(mode: &str) -> PathBuf {
         .join(mode)
 }
 
-/// Rendering inputs for argument lists: `rules`, with `TOOLS` as the
-/// managed tools directory and `ESLINT` as the `ESLint` script.
-pub(crate) fn inputs(rules: &[String]) -> Inputs<'_> {
-    Inputs {
-        rules,
-        tools: "TOOLS",
-        eslint: "ESLINT",
-    }
+/// `PATH` for the fake container runtimes in `mode` (see
+/// `tests/fake-runtime/runtime`): their directory, then the system's.
+pub(crate) fn runtime_path(mode: &str) -> OsString {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fake-runtime")
+        .join(mode);
+    let mut path = dir.into_os_string();
+    path.push(":/bin:/usr/bin");
+    path
 }
 
-/// Installs, as far as `collect` can tell, every pinned package of every
-/// managed tool in `root`: the npm manifests at the pinned versions and the
-/// `NuGet` package's recorded hash.
-pub(crate) fn install_managed(root: &Path) {
-    for managed in [Managed::EslintSonarjs, Managed::SonarCsharp] {
-        let dir = root.join(TOOLS_DIR).join(managed.dir());
-        for pin in managed.pins() {
-            let (file, text) = match pin.registry {
-                Registry::Npm => (
-                    dir.join("node_modules")
-                        .join(pin.package)
-                        .join("package.json"),
-                    format!(r#"{{"version":"{}"}}"#, pin.version),
-                ),
-                Registry::Nuget => {
-                    let id = pin.package.to_ascii_lowercase();
-                    (
-                        dir.join("packages")
-                            .join(&id)
-                            .join(pin.version)
-                            .join(format!("{id}.{}.nupkg.sha512", pin.version)),
-                        pin.integrity.trim_start_matches("sha512-").to_owned(),
-                    )
-                }
-            };
-            fs::create_dir_all(file.parent().unwrap()).unwrap();
-            fs::write(file, text).unwrap();
-        }
-    }
+/// Writes `.fake-versions` in `root`: every catalogue image's tool label
+/// and version, which the fake runtime puts in its labels.
+pub(crate) fn fake_versions(root: &Path) {
+    let lines: String = CATALOGUE
+        .iter()
+        .filter_map(|tool| match tool.kind {
+            Kind::Run(image) | Kind::NeedsGit(image) => {
+                Some(format!("{} {}\n", image.tool_label(), image.version))
+            }
+            Kind::Documented => None,
+        })
+        .collect();
+    fs::write(root.join(".fake-versions"), lines).unwrap();
 }

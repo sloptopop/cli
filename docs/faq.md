@@ -34,8 +34,12 @@ The automatic transformations work on JavaScript and TypeScript today
 
 ## Does it need the network?
 
-`check`, `fix` and `collect` work offline. They send nothing to
-sloptopop. `transform` needs the sloptopop backend. See
+`check` and `fix` work offline and send nothing to sloptopop. `collect`
+fetches the analyzer images and the daily vulnerability snapshots from
+sloptopop's component library (or your mirror), announcing each before it
+is fetched; it sends nothing about your code, and with everything cached
+`collect --offline` needs no network. `transform` needs the sloptopop
+backend. See
 [What leaves your machine](safety.md#what-leaves-your-machine).
 
 ## Does it collect telemetry?
@@ -106,15 +110,19 @@ the one it counts against.
 ## How do I add my own rules?
 
 Put Opengrep or Semgrep rules in `.sloptopop/rules/`. `sloptopop collect`
-passes them to whichever of the two you have installed, together with
-sloptopop's own rule pack. Their results appear as `analyzer.finding`. See
+passes them to Opengrep (and to Semgrep with `--only semgrep`), together
+with sloptopop's own rule pack. Their results appear as `analyzer.finding`. See
 [collect.md](collect.md).
 
-## Why does `collect` not install the analyzers for me?
+## Why does `collect` run analyzers in containers instead of using mine?
 
-So that nothing is downloaded or run on your machine without you choosing
-it. You install the tools you trust, with your usual package manager.
-See [analyzers.md](analyzers.md).
+Because the version of a tool decides what it finds. With the tools on
+everyone's `PATH`, two machines (or your machine and the server) would
+report different findings for the same code. Each image holds exactly the
+version sloptopop tested, verified by its digest, and runs without network
+and without access to anything but your repository (read-only) and the
+reports directory. `--host-tools` still runs your own tools where no
+container runtime can run, unsupported. See [analyzers.md](analyzers.md).
 
 ## Can I use sloptopop in CI?
 

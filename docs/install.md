@@ -86,11 +86,25 @@ sloptopop check .            # runs the engine on the current directory
 and 3 when the engine is missing or fails. See
 [troubleshooting.md](troubleshooting.md) if it exits 3.
 
-## Analyzers (optional)
+## Analyzers: a container runtime
 
-`sloptopop collect` runs open-source analyzers that you install yourself.
-sloptopop never installs or downloads them for you. See
-[analyzers.md](analyzers.md) for the list and their licences.
+`sloptopop collect` runs every analyzer from a container image that
+sloptopop built and pinned by digest; you do not install the analyzers.
+You need one container runtime:
+
+| Platform | Runtime (any one) |
+|---|---|
+| Linux | Docker Engine (rootful or rootless) or Podman |
+| macOS | Colima, Podman (`podman machine start`), Rancher Desktop, or Docker Desktop |
+| Windows | Podman, Rancher Desktop, or Docker Desktop (best effort) |
+
+Docker Desktop needs a paid subscription for professional use in larger
+organisations; the others are open source. `collect` finds `docker`, then
+`podman`, on your `PATH` (`--runtime` or `SLOPTOPOP_CONTAINER_RUNTIME` picks
+one). The first run fetches the images it needs (it prints each one, with
+its size, before fetching it); later runs reuse them. Behind a company
+mirror or proxy, set `SLOPTOPOP_REGISTRY`. See
+[analyzers.md](analyzers.md) and [collect.md](collect.md).
 
 ## Updates
 
@@ -107,8 +121,14 @@ them into. In each repository you ran sloptopop on, you can also delete
 these generated directories:
 
 - `.sloptopop/reports/` (analyzer reports);
-- `.sloptopop/tools/` (managed analyzer packages);
+- `.sloptopop/tools/` (left by sloptopop versions before the images; no
+  longer used);
 - `.sloptopop/transform/` (transformation reports).
+
+The analyzer images, the vulnerability snapshots in your cache
+(`~/.cache/sloptopop`) and the volumes `sloptopop-gomodcache` and
+`sloptopop-dotnet-*` can be removed with your runtime
+(`docker image rm`, `docker volume rm`).
 
 Keep `.sloptopop/rules/` if you wrote your own Opengrep or Semgrep rules
 there.

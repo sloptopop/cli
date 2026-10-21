@@ -18,6 +18,7 @@ path = "src/main.rs"
 test = false
 
 [dependencies]
+blake3 = "=1.8.7"
 schemars = "1.2.2"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"

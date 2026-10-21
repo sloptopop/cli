@@ -24,6 +24,7 @@ fn transform(root: &Path, args: &[&str], stdin: &[u8], curl: bool) -> Output {
         explicit: Some(OsString::from(FAKE_ENGINE)),
         exe_dir: None,
         path: curl.then(|| OsString::from(CURL_DIR)),
+        vars: Vec::new(),
     };
     let mut all: Vec<OsString> = vec!["transform".into(), root.as_os_str().to_owned()];
     all.extend(args.iter().map(OsString::from));

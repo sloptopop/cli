@@ -112,27 +112,56 @@ Git does not ignore `.sloptopop/reports/`. Run `sloptopop collect` once
 
 ## `collect` problems
 
-### A tool is `missing`
+### `collect` exits 3: no container runtime
 
-It is not on your `PATH`. Install it with your package manager, then run
-`collect` again. sloptopop never installs tools.
+Every analyzer runs in a pinned container image, so `collect` needs Docker
+Engine, Podman, Colima, Rancher Desktop or Docker Desktop. The error lists
+what it tried:
 
-For `eslint-sonarjs` and `sonaranalyzer-csharp`, the reason line gives the
-one install command to run from the repository root (see
-[analyzers.md](analyzers.md#managed-analyzers)).
+- `docker (not on PATH)`: install one of them (see
+  [install.md](install.md#analyzers-a-container-runtime)).
+- `on PATH, but … info failed: Cannot connect to the Docker daemon`: start
+  it (Colima: `colima start`; Podman on macOS and Windows: `podman machine
+  start`; Linux: `systemctl start docker`, or rootless `systemctl --user
+  start docker`).
+- To use only one runtime, set `SLOPTOPOP_CONTAINER_RUNTIME=podman` (or
+  pass `--runtime podman`).
+
+`collect` never falls back to the tools on your `PATH`. Where no runtime
+can run, `--host-tools` uses your own tools instead (unpinned,
+unsupported).
 
 ### A tool `failed`
 
-The reason is the first line of the tool's error output. Common causes:
+The reason is the first line of the tool's error output, or one of these:
 
-- **`sonaranalyzer-csharp`:** the project was not restored. `collect`
-  builds with `--no-restore` to stay offline, so run `dotnet restore`
-  first.
-- **`eslint-sonarjs`:** `node` is not on your `PATH`.
-- **`osv-scanner`:** it could not download its database. It needs the
-  network for that one step.
+- **`pull failed: …`:** the image could not be fetched. Check your network
+  or proxy; behind a company mirror set `SLOPTOPOP_REGISTRY`; `docker login`
+  to the mirror if it needs credentials.
+- **`image not in the local store, and --offline forbids pulling it`:** run
+  once without `--offline`, or load the release archive (see
+  [collect.md](collect.md#mirrors-proxies-and-air-gapped-machines)).
+- **`image digest mismatch` or `image labels do not match the catalogue`:**
+  the registry or store gave something other than the pinned image; nothing
+  ran from it. Check the mirror.
+- **`cannot fetch …db-osv-…`:** the vulnerability snapshot could not be
+  fetched; OSV-Scanner did not run. `--offline` uses the newest one cached.
+- **`prepare step (go mod download) failed`** or **`(dotnet restore)`:** the
+  project's dependencies could not be downloaded; usually a private module
+  or feed that needs credentials, which `collect` never passes into a
+  container.
+- **`stopped after 1800 s`:** the tool ran past its time limit; raise it
+  with `--timeout`.
+- A tool killed for memory: raise `SLOPTOPOP_COLLECT_MEMORY` (default
+  `4g`).
 
-A failed tool never stops the others, and `collect` still exits 0.
+A failed tool leaves no report, never stops the others, and `collect`
+still exits 0.
+
+### A tool is `missing` under `--host-tools`
+
+It is not on your `PATH`, or it exists only as an image. Without
+`--host-tools` it runs from its image.
 
 ### `collect` exits 1
 
@@ -140,13 +169,11 @@ It could not write `.sloptopop/reports/`, the rule pack or
 `.sloptopop/reports/.collect.json`. Check that the repository directory is
 writable.
 
-### Every entry is skipped under `--container`
+### A warning that a snapshot is old
 
-An entry runs in a container only when its image is pinned by digest.
-Entries without a pinned digest are skipped, and so are the managed
-analyzers. Run without `--container` to use the tools on your `PATH`. If
-`docker` itself is not on your `PATH`, every entry is reported as
-`missing`.
+The component library (or your mirror) has not been updated for more than
+a week, so vulnerabilities published since are not found. Update the
+mirror, or pass `--vuln-db <YYYYMMDD>` deliberately.
 
 ## `fix` problems
 

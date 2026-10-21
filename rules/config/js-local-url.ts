@@ -37,3 +37,31 @@ const LOOKALIKE = "http://localhost.example.com/";
 
 // ok: sloptopop.config.js-local-url
 const TEXT = "start the server on localhost first";
+
+// ok: sloptopop.config.js-local-url
+export const siteUrl = process.env.SITE_URL?.replace(/\/+$/, "") || "http://localhost:3000";
+
+// ok: sloptopop.config.js-local-url
+export const emailBase = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000";
+
+export const url =
+  process.env.NEXT_PUBLIC_SITE_URL && process.env.NEXT_PUBLIC_SITE_URL.trim() !== ""
+    ? process.env.NEXT_PUBLIC_SITE_URL
+    // ok: sloptopop.config.js-local-url
+    : "http://localhost:3000/";
+
+// ruleid: sloptopop.config.js-local-url
+export const thenBranch = process.env.MODE ? "http://localhost:1" : prodUrl;
+
+export function isLocal(base: string) {
+  // ok: sloptopop.config.js-local-url
+  if (base === "http://localhost:3000") return true;
+  // ok: sloptopop.config.js-local-url
+  return base.startsWith("http://localhost");
+}
+
+// ok: sloptopop.config.js-local-url
+console.log("App is running on http://localhost:3000");
+
+// ok: sloptopop.config.js-local-url
+export const cacheKey = new Request("http://localhost");

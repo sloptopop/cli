@@ -15,3 +15,13 @@ FROM_GETENV = os.getenv("API_URL") or "http://localhost:8000/api"
 
 # ok: sloptopop.config.python-local-url
 PUBLIC = "https://api.example.com"
+
+
+class Settings(BaseSettings):
+    # ok: sloptopop.config.python-local-url
+    FRONTEND_HOST: str = "http://localhost:5173"
+
+
+class Plain:
+    # ruleid: sloptopop.config.python-local-url
+    HOST = "http://localhost:5173"

@@ -11,6 +11,7 @@ fn explicit_engine_wins() {
         explicit: Some(OsString::from("/opt/engine")),
         exe_dir: Some(env::temp_dir()),
         path: Some(OsString::from("/usr/bin")),
+        vars: Vec::new(),
     };
     assert_eq!(
         locator.locate(),
@@ -30,6 +31,7 @@ fn next_to_the_executable_comes_before_path() {
         explicit: None,
         exe_dir: Some(exe_dir.0.clone()),
         path: Some(path),
+        vars: Vec::new(),
     };
     assert_eq!(
         locator.locate(),
@@ -55,4 +57,29 @@ fn process_locator_reads_the_environment() {
     let locator = Locator::from_process();
     assert_eq!(locator.path, env::var_os("PATH"), "PATH");
     assert!(locator.exe_dir.is_some(), "test binary directory");
+}
+
+#[test]
+fn collect_settings_are_captured_by_name() {
+    let locator = Locator {
+        vars: vec![(
+            "SLOPTOPOP_REGISTRY".to_owned(),
+            OsString::from("reg.example"),
+        )],
+        ..Locator::default()
+    };
+    assert_eq!(
+        locator.var("SLOPTOPOP_REGISTRY"),
+        Some(&OsString::from("reg.example"))
+    );
+    assert_eq!(locator.var("HOME"), None);
+    let process = Locator::from_process();
+    assert!(
+        process
+            .vars
+            .iter()
+            .all(|(name, value)| COLLECT_VARS.contains(&name.as_str()) && !value.is_empty()),
+        "{:?}",
+        process.vars
+    );
 }

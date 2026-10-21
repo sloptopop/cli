@@ -15,7 +15,28 @@ pub const ENGINE_NAME: &str = "sloptopop-engine";
 /// Environment variable naming the engine binary explicitly.
 pub const ENGINE_ENV: &str = "SLOPTOPOP_ENGINE";
 
-/// Where to look for the engine, captured once so lookups are testable.
+/// The environment variables `collect` reads (besides `PATH`): its own
+/// settings, where the user's cache is, and the Go module settings its
+/// prepare step passes on.
+pub(crate) const COLLECT_VARS: [&str; 14] = [
+    "SLOPTOPOP_REGISTRY",
+    "SLOPTOPOP_CONTAINER_RUNTIME",
+    "SLOPTOPOP_COLLECT_MEMORY",
+    "SLOPTOPOP_COLLECT_CPUS",
+    "SLOPTOPOP_CACHE_DIR",
+    "XDG_CACHE_HOME",
+    "HOME",
+    "LOCALAPPDATA",
+    "GOPROXY",
+    "GOPRIVATE",
+    "GONOPROXY",
+    "GONOSUMDB",
+    "GONOSUMCHECK",
+    "GOINSECURE",
+];
+
+/// Where to look for the engine (and what `collect` needs from the
+/// environment), captured once so lookups are testable.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Locator {
     /// The value of `SLOPTOPOP_ENGINE`, if set and not empty.
@@ -24,6 +45,9 @@ pub struct Locator {
     pub exe_dir: Option<PathBuf>,
     /// The value of `PATH`.
     pub path: Option<OsString>,
+    /// The set, non-empty environment variables `collect` reads: its own
+    /// settings, the cache location and the Go module settings.
+    pub vars: Vec<(String, OsString)>,
 }
 
 impl Locator {
@@ -36,7 +60,24 @@ impl Locator {
                 .ok()
                 .and_then(|exe| exe.parent().map(Path::to_path_buf)),
             path: env::var_os("PATH"),
+            vars: COLLECT_VARS
+                .iter()
+                .filter_map(|name| {
+                    env::var_os(name)
+                        .filter(|value| !value.is_empty())
+                        .map(|value| ((*name).to_owned(), value))
+                })
+                .collect(),
         }
+    }
+
+    /// The value of the captured variable `name`, if set.
+    #[must_use]
+    pub fn var(&self, name: &str) -> Option<&OsString> {
+        self.vars
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, value)| value)
     }
 
     /// The engine to run: `SLOPTOPOP_ENGINE` as given, otherwise the first

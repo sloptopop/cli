@@ -22,8 +22,8 @@ use crate::transform_command::transform;
 pub const USAGE_ERROR: u8 = 2;
 
 /// Runs the CLI with explicit streams and returns the process exit code.
-/// `check` and `fix` look for the engine, and `collect` for the analyzers,
-/// in this process's environment.
+/// `check` and `fix` look for the engine, and `collect` for the container
+/// runtime and its settings, in this process's environment.
 pub fn run(
     args: &[OsString],
     stdin: &mut dyn BufRead,
@@ -33,8 +33,8 @@ pub fn run(
     run_with(args, &Locator::from_process(), stdin, stdout, stderr)
 }
 
-/// [`run`], with the engine looked up through `locator`; `collect` looks
-/// for the analyzers on `locator.path`.
+/// [`run`], with the engine looked up through `locator`; `collect` takes
+/// `PATH` and its settings from it too.
 pub fn run_with(
     args: &[OsString],
     locator: &Locator,
@@ -51,7 +51,7 @@ pub fn run_with(
         Command::Fix(path, apply) => return fix(locator, &path, apply, stdout, stderr),
         Command::Transform(options) => return transform(locator, &options, stdin, stdout, stderr),
         Command::Collect(options) => {
-            return collect(&options, locator.path.as_deref(), stdout, stderr)
+            return collect(&options, locator, stdout, stderr)
                 .unwrap_or_else(|message| usage_error(stderr, &message));
         }
         Command::Serve => {

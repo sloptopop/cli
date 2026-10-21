@@ -1,14 +1,13 @@
 //! Unit tests for [`super`]: the catalogue's invariants.
 
 use std::collections::HashSet;
+use std::path::Path;
 
 use super::*;
-use crate::collect_managed::Managed;
-use crate::tests::support::inputs;
 
 /// Every licence the catalogue may claim. A claim is only allowed with the
 /// licence files it was read from (`licence_files`), checked below.
-const LICENCES: [&str; 9] = [
+const LICENCES: [&str; 11] = [
     "MIT",
     "Apache-2.0",
     "BSD-3-Clause",
@@ -16,8 +15,10 @@ const LICENCES: [&str; 9] = [
     "MIT OR Apache-2.0",
     "Apache-2.0 OR MIT",
     "LGPL-2.1-only",
+    "GPL-2.0-or-later",
     "GPL-3.0-only",
     "LGPL-3.0-only",
+    "Apache-2.0 WITH LLVM-exception",
 ];
 
 fn entry(name: &str) -> &'static Tool {
@@ -28,12 +29,19 @@ fn entry(name: &str) -> &'static Tool {
 }
 
 fn has(tool: &Tool, flags: &[&str]) -> bool {
-    let argv = tool.argv(&inputs(&["RULES".to_owned()]));
+    let argv = tool.argv(&["RULES".to_owned()], false);
     argv.windows(flags.len()).any(|window| window == flags)
 }
 
+fn image(tool: &Tool) -> Option<Image> {
+    match tool.kind {
+        Kind::Run(image) | Kind::NeedsGit(image) => Some(image),
+        Kind::Documented => None,
+    }
+}
+
 #[test]
-fn the_required_tier_one_tools_are_catalogued() {
+fn the_required_tools_are_catalogued() {
     for name in [
         "gitleaks",
         "gitleaks-history",
@@ -44,14 +52,23 @@ fn the_required_tier_one_tools_are_catalogued() {
         "gosec",
         "govulncheck",
         "ruff",
+        "pylint-cyclic-import",
         "oxlint",
         "biome",
+        "eslint-sonarjs",
+        "eslint-sonarjs-json",
+        "eslint-typescript",
+        "dependency-cruiser",
         "staticcheck",
         "golangci-lint",
         "swiftlint",
-        "eslint-sonarjs",
-        "eslint-sonarjs-json",
         "sonaranalyzer-csharp",
+        "scorecard-license",
+        "jscpd",
+        "phpcs",
+        "pmd",
+        "detekt",
+        "clang-tidy",
         "cargo-llvm-cov",
         "coverage.py",
         "c8",
@@ -66,6 +83,7 @@ fn the_required_tier_one_tools_are_catalogued() {
 fn names_and_outputs_are_unique_and_plain() {
     let mut names = HashSet::new();
     let mut outputs = HashSet::new();
+    let mut raws = HashSet::new();
     for tool in CATALOGUE {
         assert!(names.insert(tool.name), "{}: duplicate name", tool.name);
         assert!(
@@ -89,6 +107,29 @@ fn names_and_outputs_are_unique_and_plain() {
             "{}: usable with --only",
             tool.name
         );
+        if let Some((_, raw)) = tool.convert {
+            assert!(raws.insert(raw), "{}: duplicate raw file", tool.name);
+            assert!(
+                !raw.contains('/') && Path::new(raw).extension().is_none_or(|e| e != "sarif"),
+                "{}: {raw}",
+                tool.name
+            );
+            assert!(
+                Path::new(tool.output)
+                    .extension()
+                    .is_some_and(|e| e == "sarif"),
+                "{}: converted to SARIF",
+                tool.name
+            );
+            assert_eq!(
+                tool.written_path(),
+                format!("{RAW_DIR}/{raw}"),
+                "{}",
+                tool.name
+            );
+        } else {
+            assert_eq!(tool.written_path(), tool.output_path(), "{}", tool.name);
+        }
     }
 }
 
@@ -120,7 +161,15 @@ fn every_licence_was_read_from_a_licence_file_at_a_release() {
                 tool.name
             );
             assert!(
-                ["LICENSE", "LICENSE.txt", "LICENSE-MIT", "LICENSE-APACHE"].contains(&name)
+                [
+                    "LICENSE",
+                    "LICENSE.txt",
+                    "LICENSE.TXT",
+                    "LICENSE-MIT",
+                    "LICENSE-APACHE",
+                    "licence.txt",
+                ]
+                .contains(&name)
                     || name.ends_with(".nuspec"),
                 "{}: {file} is a licence file",
                 tool.name
@@ -137,19 +186,87 @@ fn every_licence_was_read_from_a_licence_file_at_a_release() {
 }
 
 #[test]
-fn managed_entries_claim_the_licence_of_their_pinned_analyzer() {
-    for (name, managed) in [
-        ("eslint-sonarjs", Managed::EslintSonarjs),
-        ("eslint-sonarjs-json", Managed::EslintSonarjs),
-        ("sonaranalyzer-csharp", Managed::SonarCsharp),
-    ] {
-        let tool = entry(name);
-        let analyzer = managed.pins().first().unwrap();
-        assert_eq!(tool.kind, Kind::Managed(managed), "{name}");
-        assert_eq!(tool.licence, analyzer.licence, "{name}");
-        assert_eq!(tool.licence_files, analyzer.licence_files, "{name}");
-        assert_eq!(tool.image, None, "{name}: no container image");
+fn every_runnable_entry_has_a_well_formed_pinned_image() {
+    for tool in CATALOGUE {
+        let Some(image) = image(tool) else {
+            continue;
+        };
+        let hex = image.digest.strip_prefix("sha256:").unwrap_or_default();
+        assert!(
+            hex.len() == 64 && hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')),
+            "{}: digest {}",
+            tool.name,
+            image.digest
+        );
+        assert!(
+            image.name.starts_with("analyzers/") && !image.name.contains(['@', ':']),
+            "{}: {}",
+            tool.name,
+            image.name
+        );
+        assert!(
+            image.version.contains('-') && !image.version.contains(char::is_whitespace),
+            "{}: version {} has a build revision",
+            tool.name,
+            image.version
+        );
+        assert!(
+            image.bytes.iter().all(|&bytes| bytes > 1_000_000),
+            "{}: sizes {:?}",
+            tool.name,
+            image.bytes
+        );
     }
+}
+
+#[test]
+fn pull_sizes_follow_the_host_architecture() {
+    let image = Image {
+        name: "analyzers/x",
+        version: "1-1",
+        digest: "sha256:00",
+        bytes: [10, 20],
+    };
+    assert_eq!(image.pull_bytes("x86_64"), 10);
+    assert_eq!(image.pull_bytes("aarch64"), 20);
+}
+
+#[test]
+fn entries_sharing_an_image_share_its_digest() {
+    let mut seen: Vec<Image> = Vec::new();
+    for tool in CATALOGUE {
+        if let Some(image) = image(tool) {
+            if let Some(other) = seen.iter().find(|other| other.name == image.name) {
+                assert_eq!(*other, image, "{}: one pin per image", tool.name);
+            }
+            seen.push(image);
+        }
+    }
+    assert_eq!(entry("gitleaks").kind, Kind::Run(GITLEAKS));
+    assert_eq!(
+        entry("gitleaks-history").kind,
+        Kind::NeedsGit(GITLEAKS),
+        "history needs git"
+    );
+    assert_eq!(entry("eslint-sonarjs-json").kind, Kind::Run(ESLINT_SONARJS));
+}
+
+#[test]
+fn references_and_labels() {
+    let image = GITLEAKS;
+    assert_eq!(
+        image.reference("registry.example/mirror"),
+        format!(
+            "registry.example/mirror/analyzers/gitleaks@{}",
+            image.digest
+        )
+    );
+    assert_eq!(image.tool_label(), "gitleaks");
+    let flat = Image {
+        name: "flat",
+        ..image
+    };
+    assert_eq!(flat.tool_label(), "flat");
 }
 
 #[test]
@@ -189,46 +306,112 @@ fn flags_are_fixed_and_the_sink_matches_the_arguments() {
 }
 
 #[test]
-fn documented_entries_are_never_containerised() {
+fn only_semgrep_needs_naming() {
+    for tool in CATALOGUE {
+        assert_eq!(!tool.default, tool.name == "semgrep", "{}", tool.name);
+    }
+}
+
+#[test]
+fn documented_entries_run_nowhere() {
     for tool in CATALOGUE
         .iter()
         .filter(|tool| tool.kind == Kind::Documented)
     {
-        assert_eq!(tool.image, None, "{}", tool.name);
-        assert_eq!(tool.network, Network::Offline, "{}", tool.name);
+        assert_eq!(tool.prepare, None, "{}", tool.name);
+        assert_eq!(tool.data, None, "{}", tool.name);
+        assert_eq!(tool.convert, None, "{}", tool.name);
     }
 }
 
 #[test]
-fn pinned_digests_are_well_formed() {
+fn only_the_go_analyzers_and_the_dotnet_build_need_a_prepare_step() {
     for tool in CATALOGUE {
-        if let Some(image) = tool.image {
-            assert!(
-                !image.repository.contains(['@', ':']),
-                "{}: no tag",
-                tool.name
-            );
-            if image.digest.is_some() {
-                assert!(
-                    image.reference().is_some(),
-                    "{}: malformed digest",
-                    tool.name
-                );
-            }
-        }
+        let expected = match tool.name {
+            "gosec" | "govulncheck" | "staticcheck" | "golangci-lint" => Some(Prepare::GoModules),
+            "sonaranalyzer-csharp" => Some(Prepare::DotnetRestore),
+            _ => None,
+        };
+        assert_eq!(tool.prepare, expected, "{}", tool.name);
     }
 }
 
 #[test]
-fn only_osv_scanner_downloads_a_database() {
+fn the_scanners_read_mounted_vulnerability_data() {
     for tool in CATALOGUE {
-        assert_eq!(
-            tool.network == Network::DatabaseDownload,
-            tool.name == "osv-scanner",
-            "{}",
-            tool.name
-        );
+        let expected = match tool.name {
+            "osv-scanner" => Some(Data::Osv),
+            "govulncheck" => Some(Data::GoVuln),
+            _ => None,
+        };
+        assert_eq!(tool.data, expected, "{}", tool.name);
     }
+    assert!(
+        has(entry("osv-scanner"), &["--offline", "--format", "sarif"]),
+        "fully offline"
+    );
+    assert!(
+        has(entry("govulncheck"), &["-db", "file:///db/govulndb"]),
+        "local database"
+    );
+}
+
+#[test]
+fn host_arguments_replace_only_the_mounts() {
+    let osv = entry("osv-scanner");
+    let host = osv.argv(&[], true);
+    assert!(
+        host.windows(2)
+            .any(|w| w == ["--offline-vulnerabilities", "--download-offline-databases"]),
+        "{host:?}"
+    );
+    assert!(
+        !osv.argv(&[], false)
+            .contains(&"--download-offline-databases".to_owned())
+    );
+    let govulncheck = entry("govulncheck").argv(&[], true);
+    assert_eq!(govulncheck, ["govulncheck", "-format", "sarif", "./..."]);
+    let ruff = entry("ruff");
+    assert_eq!(ruff.argv(&[], true), ruff.argv(&[], false), "Host::Same");
+    let eslint = entry("eslint-sonarjs");
+    assert_eq!(eslint.host, Host::ImageOnly);
+    assert_eq!(eslint.argv(&[], true), eslint.argv(&[], false));
+}
+
+#[test]
+fn arguments_render_outputs_rules_and_directories() {
+    let rules = ["/rules/0".to_owned(), "/rules/1".to_owned()];
+    assert_eq!(
+        entry("opengrep").argv(&rules, false),
+        [
+            "opengrep",
+            "scan",
+            "--sarif",
+            "--no-rewrite-rule-ids",
+            "--config",
+            "/rules/0",
+            "--config",
+            "/rules/1",
+            "."
+        ]
+    );
+    assert!(has(
+        entry("golangci-lint"),
+        &["--output.sarif.path=.sloptopop/reports/golangci.sarif"]
+    ));
+    assert!(has(
+        entry("detekt"),
+        &["--report", "sarif:.sloptopop/reports/detekt.sarif"]
+    ));
+    assert!(has(
+        entry("jscpd"),
+        &["--output=.sloptopop/reports", "--report-name", "jscpd"]
+    ));
+    assert!(has(entry("c8"), &["--reports-dir=.sloptopop/reports"]));
+    assert_eq!(
+        entry("jscpd").output_path(),
+        ".sloptopop/reports/jscpd.sarif"
+    );
 }
 
 #[test]
@@ -240,22 +423,6 @@ fn security_relevant_flags_are_present() {
         assert!(has(tool, &["--exit-code", "0"]), "{name} exit code");
     }
     assert!(has(entry("gitleaks"), &["gitleaks", "dir"]), "working tree");
-    assert_eq!(entry("gitleaks-history").kind, Kind::NeedsGit, "history");
-    assert!(
-        has(
-            entry("osv-scanner"),
-            &[
-                "scan",
-                "source",
-                "-r",
-                "--offline-vulnerabilities",
-                "--download-offline-databases",
-                "--format",
-                "sarif"
-            ]
-        ),
-        "osv-scanner offline"
-    );
     for name in ["opengrep", "semgrep"] {
         assert!(
             has(entry(name), &["--config", "RULES"]),
@@ -268,6 +435,19 @@ fn security_relevant_flags_are_present() {
     }
     assert!(has(entry("semgrep"), &["--metrics", "off"]), "no metrics");
     assert!(
+        has(entry("semgrep"), &["--disable-version-check"]),
+        "no version check"
+    );
+    assert!(has(entry("ruff"), &["--no-cache"]), "ruff writes nothing");
+    assert!(
+        has(entry("ruff"), &["--extend-select", "S110,S501,N999"]),
+        "crown-jewel rules"
+    );
+    assert!(
+        has(entry("swiftlint"), &["--no-cache"]),
+        "swiftlint writes nothing"
+    );
+    assert!(
         has(
             entry("golangci-lint"),
             &[
@@ -276,143 +456,62 @@ fn security_relevant_flags_are_present() {
                 "--uniq-by-line=false"
             ]
         ),
-        "golangci-lint uncapped"
+        "no caps"
     );
-    assert!(has(entry("ruff"), &["--no-cache"]), "ruff writes no cache");
-}
-
-#[test]
-fn managed_tools_run_with_sloptopops_files_only() {
-    for (name, format) in [
-        (
-            "eslint-sonarjs",
-            "TOOLS/eslint-sonarjs/node_modules/@microsoft/eslint-formatter-sarif/sarif.js",
-        ),
-        ("eslint-sonarjs-json", "json-with-metadata"),
-    ] {
-        let tool = entry(name);
+    for name in ["eslint-sonarjs", "eslint-sonarjs-json", "eslint-typescript"] {
+        assert!(has(entry(name), &["--no-inline-config"]), "{name}");
         assert!(
-            has(
-                tool,
-                &[
-                    "node",
-                    "ESLINT",
-                    "--config",
-                    "TOOLS/eslint-sonarjs/eslint.config.mjs",
-                    "--no-inline-config",
-                    "--no-error-on-unmatched-pattern",
-                    "--format",
-                    format
-                ]
-            ),
-            "{name}: sloptopop's configuration only, offline"
+            has(entry(name), &["--no-error-on-unmatched-pattern"]),
+            "{name}"
         );
     }
-    assert!(
-        has(
-            entry("sonaranalyzer-csharp"),
-            &[
-                "dotnet",
-                "build",
-                "--no-restore",
-                "--no-incremental",
-                "-p:TreatWarningsAsErrors=false",
-                "-p:DirectoryBuildPropsPath=TOOLS/sonaranalyzer-csharp/Directory.Build.props"
-            ]
-        ),
-        "no download, every file compiled, the generated props"
+    assert!(has(
+        entry("pylint-cyclic-import"),
+        &["--disable=all", "--enable=cyclic-import"]
+    ));
+    assert!(has(
+        entry("scorecard-license"),
+        &["--local=.", "--checks=License"]
+    ));
+    assert_eq!(
+        entry("scorecard-license").env,
+        [("GITHUB_AUTH_TOKEN", "unused-in-local-mode")]
     );
+    assert!(has(
+        entry("pmd"),
+        &["-R", "category/java/errorprone.xml/EmptyCatchBlock"]
+    ));
+    assert!(has(entry("clang-tidy"), &["-*,bugprone-empty-catch"]));
 }
 
 #[test]
-fn argv_renders_every_argument_kind() {
-    let tool = Tool {
-        name: "t",
-        command: "tool",
-        licence: "MIT",
-        licence_files: &[],
-        scope: Scope::CrossCutting,
-        kind: Kind::Run,
-        args: &[
-            Fixed("-x"),
-            Output(""),
-            Output("--out="),
-            ReportsDir("--dir="),
-            Rules("--config"),
-            Tools("--props=", "t/p"),
-            Eslint,
-        ],
-        output: "t.sarif",
-        sink: Sink::PathArgument,
-        findings: &[],
-        network: Network::Offline,
-        image: None,
-    };
-    assert_eq!(
-        tool.argv(&inputs(&["/a".to_owned(), "/b".to_owned()])),
-        [
-            "tool",
-            "-x",
-            ".sloptopop/reports/t.sarif",
-            "--out=.sloptopop/reports/t.sarif",
-            "--dir=.sloptopop/reports",
-            "--config",
-            "/a",
-            "--config",
-            "/b",
-            "--props=TOOLS/t/p",
-            "ESLINT"
-        ],
-        "argv"
-    );
-    assert_eq!(
-        tool.version_args(&inputs(&[])),
-        ["--version"],
-        "the tool prints its version"
-    );
-    assert_eq!(
-        entry("eslint-sonarjs").version_args(&inputs(&[])),
-        ["ESLINT", "--version"],
-        "ESLint's script prints ESLint's version"
-    );
-    assert!(tool.takes_rules(), "takes rules");
-    assert!(!entry("ruff").takes_rules(), "ruff takes none");
-    assert_eq!(
-        tool.output_path(),
-        ".sloptopop/reports/t.sarif",
-        "output path"
-    );
-}
-
-#[test]
-fn scope_decides_applicability() {
+fn scopes_follow_the_ecosystems() {
     let python = BTreeSet::from([Ecosystem::Python]);
-    assert!(entry("gitleaks").applies(&BTreeSet::new()), "cross-cutting");
-    assert!(entry("ruff").applies(&python), "python tool on python");
-    assert!(!entry("gosec").applies(&python), "go tool on python");
+    assert!(entry("gitleaks").applies(&python), "cross-cutting");
+    assert!(entry("ruff").applies(&python));
+    assert!(!entry("oxlint").applies(&python));
+    assert!(entry("oxlint").applies(&BTreeSet::from([Ecosystem::Node])));
+    assert!(entry("detekt").applies(&BTreeSet::from([Ecosystem::Jvm])));
+    assert!(entry("phpcs").applies(&BTreeSet::from([Ecosystem::Php])));
+    assert!(entry("clang-tidy").applies(&BTreeSet::from([Ecosystem::Cpp])));
+    assert!(!entry("clang-tidy").applies(&BTreeSet::new()));
 }
 
+/// The whole catalogue, every field of every entry, as reviewed: a change
+/// to an entry (a flag, an output, a digest) must change this file too, so
+/// it shows in review. `catalogue.txt` is `format!("{CATALOGUE:#?}\n")`.
 #[test]
-fn only_well_formed_digests_make_a_reference() {
-    let leak = |text: String| -> &'static str { Box::leak(text.into_boxed_str()) };
-    let hex = "0123456789abcdef".repeat(4);
-    let image = |digest| Image {
-        repository: "example/tool",
-        digest,
-    };
-    assert_eq!(
-        image(Some(leak(format!("sha256:{hex}")))).reference(),
-        Some(format!("example/tool@sha256:{hex}")),
-        "pinned"
+fn the_catalogue_is_the_reviewed_one() {
+    let shown = format!("{CATALOGUE:#?}\n");
+    let reviewed = include_str!("catalogue.txt");
+    let first = shown
+        .lines()
+        .zip(reviewed.lines())
+        .position(|(a, b)| a != b);
+    assert!(
+        shown == reviewed,
+        "the catalogue differs from src/collect_catalogue/catalogue.txt at line {}",
+        first.map_or(shown.lines().count().min(reviewed.lines().count()), |n| n
+            + 1)
     );
-    for digest in [
-        None,
-        Some(leak(format!("sha256:{}", hex.to_uppercase()))),
-        Some(leak(format!("sha256:{}", "a".repeat(63)))),
-        Some(leak(format!("sha256:{hex}0"))),
-        Some(leak(format!("sha512:{hex}"))),
-        Some(leak(format!("sha256:{}g", "a".repeat(63)))),
-    ] {
-        assert_eq!(image(digest).reference(), None, "{digest:?}");
-    }
 }

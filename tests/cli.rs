@@ -4,7 +4,8 @@
 //! `check` and `fix` are tested against the committed fake engine in
 //! `tests/fake-engine/`, which speaks the public Report contract. The real
 //! engine is proprietary and is never needed here. `collect` is tested
-//! against the committed fake analyzers in `tests/fake-tools/`.
+//! against the committed fake container runtime in `tests/fake-runtime/`
+//! (and, for `--host-tools`, the fake analyzers in `tests/fake-tools/`).
 
 use std::ffi::OsStr;
 use std::fs;
@@ -12,8 +13,8 @@ use std::path::Path;
 
 use serde_json::Value;
 use support::{
-    FAKE_ENGINE, FAKE_ENGINE_DIR, checked_inputs, collect, collect_fixture, frame, matches, run,
-    run_engine, scratch, unframe,
+    FAKE_ENGINE, FAKE_ENGINE_DIR, FAKE_TOOLS, checked_inputs, collect, collect_fixture,
+    collect_with, frame, matches, run, run_engine, scratch, unframe,
 };
 
 /// Helpers shared by the tests below.
@@ -65,19 +66,12 @@ mod support {
         dir
     }
 
-    /// The npm packages of the eslint-sonarjs entries, at their pinned
-    /// versions.
-    const ESLINT_SONARJS: [(&str, &str); 5] = [
-        ("eslint-plugin-sonarjs", "2.0.4"),
-        ("eslint", "9.14.0"),
-        ("@microsoft/eslint-formatter-sarif", "3.1.0"),
-        ("@typescript-eslint/parser", "7.16.1"),
-        ("typescript", "5.5.4"),
-    ];
+    /// The committed fake Docker (see `tests/fake-runtime/runtime`).
+    pub(crate) const FAKE_RUNTIME: &str =
+        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fake-runtime/docker");
 
-    /// A repository using Go, Node, Python and Swift, with git history, a
-    /// local rules directory and the eslint-sonarjs packages installed (as
-    /// far as `collect` looks), so every non-coverage entry for those
+    /// A repository using Go, Node, Python and Swift, with git history and
+    /// a local rules directory, so every non-coverage entry for those
     /// ecosystems applies and runs.
     pub(crate) fn collect_fixture(name: &str) -> PathBuf {
         let root = scratch(name);
@@ -86,22 +80,54 @@ mod support {
         }
         fs::create_dir_all(root.join(".git")).expect("git directory");
         fs::create_dir_all(root.join(".sloptopop/rules")).expect("rules directory");
-        let modules = root.join(".sloptopop/tools/eslint-sonarjs/node_modules");
-        for (package, version) in ESLINT_SONARJS {
-            let dir = modules.join(package);
-            fs::create_dir_all(&dir).expect("package directory");
-            fs::write(
-                dir.join("package.json"),
-                format!(r#"{{"version":"{version}"}}"#),
-            )
-            .expect("package manifest");
-        }
         root
     }
 
-    /// Runs `sloptopop` with only the fake analyzers on `PATH`.
-    pub(crate) fn collect(args: &[&str]) -> Output {
-        run_engine(args, None, OsStr::new(FAKE_TOOLS))
+    /// Runs `sloptopop` with `path` as `PATH`, the test registry and a
+    /// cache in the scratch directory, and no other collect setting.
+    pub(crate) fn collect_with(args: &[&str], path: &OsStr) -> Output {
+        let cache = scratch("collect-cache");
+        let mut command = Command::new(BIN);
+        command
+            .args(args)
+            .env("PATH", path)
+            .env("SLOPTOPOP_REGISTRY", "reg.example")
+            .env("SLOPTOPOP_CACHE_DIR", cache)
+            .env_remove("SLOPTOPOP_ENGINE");
+        for name in [
+            "SLOPTOPOP_CONTAINER_RUNTIME",
+            "SLOPTOPOP_COLLECT_MEMORY",
+            "SLOPTOPOP_COLLECT_CPUS",
+            "GOPROXY",
+        ] {
+            command.env_remove(name);
+        }
+        command.output().expect("binary should run")
+    }
+
+    /// `PATH` with the fake Docker first.
+    pub(crate) fn fake_docker() -> std::ffi::OsString {
+        let mut path = std::ffi::OsString::from(FAKE_RUNTIME);
+        path.push(":/bin:/usr/bin");
+        path
+    }
+
+    /// Runs `sloptopop collect` against the fake Docker, after writing the
+    /// images' versions (read from a dry run) where the fake finds them.
+    pub(crate) fn collect(args: &[&str], root: &Path) -> Output {
+        let mut dry: Vec<&str> = args.to_vec();
+        dry.push("--dry-run");
+        let plan = collect_with(&dry, &fake_docker());
+        let versions: String = String::from_utf8_lossy(&plan.stdout)
+            .lines()
+            .filter_map(|line| {
+                let label = line.split("/analyzers/").nth(1)?.split('@').next()?;
+                let version = line.split(" (").nth(1)?.split(',').next()?;
+                Some(format!("{label} {version}\n"))
+            })
+            .collect();
+        fs::write(root.join(".fake-versions"), versions).expect("versions");
+        collect_with(args, &fake_docker())
     }
 
     /// The report paths the fake engine's `check` read in `root`.
@@ -379,71 +405,76 @@ fn missing_engine_exits_3_with_a_hint() {
     assert!(stderr.contains("SLOPTOPOP_ENGINE"), "hint");
 }
 
-/// Every entry that runs on the fixture, with the exit code its fake
-/// reports findings with and the report it writes.
-const RAN: [(&str, i64, &str); 16] = [
+/// Every entry that runs on the fixture, with the exit code the fake
+/// runtime's tool reports findings with and the report it writes.
+const RAN: [(&str, i64, &str); 22] = [
     ("gitleaks", 0, "gitleaks.sarif"),
     ("gitleaks-history", 0, "gitleaks.history.sarif"),
     ("osv-scanner", 1, "osv-scanner.sarif"),
     ("opengrep", 0, "opengrep.sarif"),
-    ("semgrep", 0, "semgrep.sarif"),
     ("bandit", 1, "bandit.sarif"),
     ("gosec", 1, "gosec.sarif"),
-    ("govulncheck", 3, "govulncheck.sarif"),
+    ("govulncheck", 0, "govulncheck.sarif"),
     ("ruff", 1, "ruff.sarif"),
+    ("pylint-cyclic-import", 0, "pylint-cyclic-import.sarif"),
     ("oxlint", 1, "oxlint.sarif"),
     ("biome", 1, "biome.sarif"),
+    ("eslint-sonarjs", 1, "eslint-sonarjs.sarif"),
+    ("eslint-sonarjs-json", 1, "eslint-sonarjs.json"),
+    ("eslint-typescript", 1, "eslint-typescript.sarif"),
+    ("dependency-cruiser", 0, "dependency-cruiser.sarif"),
     ("staticcheck", 1, "staticcheck.sarif"),
     ("golangci-lint", 1, "golangci.sarif"),
     ("swiftlint", 2, "swiftlint.sarif"),
-    ("eslint-sonarjs", 1, "eslint-sonarjs.sarif"),
-    ("eslint-sonarjs-json", 1, "eslint-sonarjs.json"),
+    ("scorecard-license", 0, "scorecard-license.sarif"),
+    ("jscpd", 0, "jscpd.sarif"),
+    ("coverage.py", -1, ""),
+    ("c8", -1, ""),
 ];
 
 #[test]
-fn collect_runs_installed_tools_and_check_reads_their_reports() {
+fn collect_runs_pinned_images_and_check_reads_their_reports() {
     let root = collect_fixture("collect-full");
     let root_arg = root.to_str().expect("UTF-8 path");
-    let out = collect(&["collect", root_arg]);
+    let out = collect(&["collect", root_arg], &root);
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert_eq!(out.status.code(), Some(0), "exit 0: {stdout}");
     assert!(
-        stdout.starts_with(
-            "sloptopop collect: 16 ran, 0 failed, 0 missing, 2 skipped (ecosystems: go, node, python, swift)\n"
+        stdout.contains(
+            "sloptopop collect: 20 ran, 0 failed, 0 missing, 2 skipped (ecosystems: go, node, python, swift)\n"
         ),
         "{stdout}"
     );
     assert!(
-        stdout.contains("  ran      swiftlint        exit 2  .sloptopop/reports/swiftlint.sarif\n"),
-        "{stdout}"
+        stdout.starts_with("fetch    gitleaks "),
+        "announced first: {stdout}"
     );
     let reports = root.join(".sloptopop/reports");
     let record: Value =
         serde_json::from_str(&fs::read_to_string(reports.join(".collect.json")).expect("record"))
             .expect("record is JSON");
+    assert_eq!(record["mode"], "container");
     let tools = record["tools"].as_array().expect("tools");
-    assert_eq!(tools.len(), RAN.len() + 2, "{record:#}");
+    assert_eq!(tools.len(), RAN.len(), "{record:#}");
     for ((name, code, file), tool) in RAN.iter().zip(tools) {
         assert_eq!(tool["name"], *name, "order");
-        assert_eq!(tool["status"], "ran", "{name}");
+        if *code < 0 {
+            assert_eq!(tool["status"], "skipped", "{name}");
+            continue;
+        }
+        assert_eq!(tool["status"], "ran", "{name}: {tool}");
         assert_eq!(tool["exitCode"], *code, "{name}");
-        let command = tool["argv"][0].as_str().expect("argv");
-        assert_eq!(tool["version"], format!("{command} 1.0.0"), "{name}");
         assert_eq!(
             tool["output"],
             format!(".sloptopop/reports/{file}"),
             "{name}"
         );
-        let report = fs::read_to_string(reports.join(file)).expect("report written");
+        assert!(reports.join(file).is_file(), "{name}: report written");
         assert!(
-            report.contains(&format!("\"name\":\"{command}\"")),
-            "{name}: {report}"
-        );
-    }
-    for (tool, name) in tools.iter().skip(RAN.len()).zip(["coverage.py", "c8"]) {
-        assert_eq!(
-            (&tool["name"], &tool["status"]),
-            (&Value::from(name), &Value::from("skipped")),
+            tool["image"]["reference"]
+                .as_str()
+                .expect("image")
+                .starts_with("reg.example/analyzers/"),
             "{name}"
         );
     }
@@ -452,22 +483,26 @@ fn collect_runs_installed_tools_and_check_reads_their_reports() {
         "*\n",
         "reports ignored"
     );
-    let calls = fs::read_to_string(root.join(".fake-calls")).expect("tools ran in the root");
-    assert!(
-        calls.contains("gitleaks git . --redact --report-format sarif --report-path .sloptopop/reports/gitleaks.history.sarif --exit-code 0\n"),
-        "{calls}"
-    );
     let first = fs::read(reports.join(".collect.json")).expect("record");
-    let again = collect(&["collect", root_arg]);
-    assert_eq!(again.stdout, out.stdout, "same summary");
+    let again = collect(&["collect", root_arg], &root);
     assert_eq!(
         fs::read(reports.join(".collect.json")).expect("record"),
         first,
         "same record"
     );
+    let again_text = String::from_utf8_lossy(&again.stdout);
+    assert!(
+        !again_text.contains("fetch    gitleaks"),
+        "images cached: {again_text}"
+    );
+    assert!(
+        again_text.contains("fetch    db-osv-pypi"),
+        "the newest snapshot is checked: {again_text}"
+    );
     let inputs = checked_inputs(root_arg);
     let mut expected: Vec<String> = RAN
         .iter()
+        .filter(|(_, code, _)| *code >= 0)
         .map(|(_, _, file)| format!(".sloptopop/reports/{file}"))
         .collect();
     expected.sort();
@@ -478,57 +513,29 @@ fn collect_runs_installed_tools_and_check_reads_their_reports() {
 }
 
 #[test]
-fn collect_runs_eslint_sonarjs_from_the_managed_directory() {
-    let root = collect_fixture("collect-eslint");
-    let out = collect(&[
-        "collect",
-        root.to_str().expect("UTF-8"),
-        "--only",
-        "eslint-sonarjs-json",
-    ]);
-    assert_eq!(out.status.code(), Some(0), "exit 0");
-    let calls = fs::read_to_string(root.join(".fake-calls")).expect("ESLint ran");
-    let tools = root.join(".sloptopop/tools");
-    let eslint = tools.join("eslint-sonarjs");
-    assert!(
-        calls.contains(&format!(
-            "node {} --config {} --no-inline-config --no-error-on-unmatched-pattern --format json-with-metadata --output-file .sloptopop/reports/eslint-sonarjs.json .\n",
-            eslint.join("node_modules/eslint/bin/eslint.js").display(),
-            eslint.join("eslint.config.mjs").display()
-        )),
-        "{calls}"
-    );
-    assert!(
-        eslint.join("package-lock.json").is_file(),
-        "the lockfile for npm ci"
-    );
-    assert_eq!(
-        fs::read_to_string(tools.join(".gitignore")).expect("ignored"),
-        "*\n",
-        "tools ignored"
-    );
-}
-
-#[test]
-fn collect_passes_the_built_in_pack_then_the_local_rules() {
+fn collect_mounts_the_built_in_pack_then_the_local_rules() {
     let root = collect_fixture("collect-pack");
-    let out = collect(&[
-        "collect",
-        root.to_str().expect("UTF-8"),
-        "--only",
-        "semgrep",
-    ]);
+    let out = collect(
+        &[
+            "collect",
+            root.to_str().expect("UTF-8"),
+            "--only",
+            "semgrep",
+        ],
+        &root,
+    );
     assert_eq!(out.status.code(), Some(0), "exit 0");
-    let calls = fs::read_to_string(root.join(".fake-calls")).expect("semgrep ran");
+    let calls = fs::read_to_string(root.join(".fake-runtime-calls")).expect("semgrep ran");
     let pack = root.join(".sloptopop/reports/.rules");
     assert!(
         calls.contains(&format!(
-            "semgrep scan --sarif --metrics off --disable-version-check --no-rewrite-rule-ids --config {} --config {} .\n",
+            "--mount type=bind,source={},target=/rules/0,readonly --mount type=bind,source={},target=/rules/1,readonly",
             pack.display(),
             root.join(".sloptopop/rules").display()
         )),
         "{calls}"
     );
+    assert!(calls.contains("scan --sarif --metrics off --disable-version-check --no-rewrite-rule-ids --config /rules/0 --config /rules/1 ."), "{calls}");
     assert!(
         pack.join("supabase/unchecked-write.yaml").is_file(),
         "the pack is written"
@@ -539,15 +546,18 @@ fn collect_passes_the_built_in_pack_then_the_local_rules() {
 fn collect_leaves_ignoring_to_the_root_gitignore() {
     let root = collect_fixture("collect-ignored");
     fs::write(root.join(".gitignore"), "/.sloptopop/\n").expect("gitignore");
-    let out = collect(&[
-        "collect",
-        root.to_str().expect("UTF-8"),
-        "--only",
-        "ruff,gitleaks",
-    ]);
+    let out = collect(
+        &[
+            "collect",
+            root.to_str().expect("UTF-8"),
+            "--only",
+            "ruff,gitleaks",
+        ],
+        &root,
+    );
     assert_eq!(out.status.code(), Some(0), "exit 0");
     assert!(
-        String::from_utf8_lossy(&out.stdout).starts_with("sloptopop collect: 2 ran, "),
+        String::from_utf8_lossy(&out.stdout).contains("sloptopop collect: 2 ran, "),
         "only the selected tools"
     );
     assert!(
@@ -560,45 +570,70 @@ fn collect_leaves_ignoring_to_the_root_gitignore() {
 fn collect_dry_run_and_usage_errors() {
     let root = collect_fixture("collect-dry");
     let root_arg = root.to_str().expect("UTF-8");
-    let dry = collect(&["collect", root_arg, "--dry-run", "--only", "osv-scanner"]);
-    assert_eq!(dry.status.code(), Some(0), "exit 0");
-    assert_eq!(
-        String::from_utf8_lossy(&dry.stdout),
-        "sloptopop collect: dry run, nothing run (ecosystems: go, node, python, swift)\n  run      osv-scanner      osv-scanner scan source -r --offline-vulnerabilities --download-offline-databases --format sarif . > .sloptopop/reports/osv-scanner.sarif\n",
-        "plan"
+    let dry = collect_with(
+        &["collect", root_arg, "--dry-run", "--only", "osv-scanner"],
+        OsStr::new(""),
     );
+    assert_eq!(dry.status.code(), Some(0), "exit 0");
+    let text = String::from_utf8_lossy(&dry.stdout);
+    assert!(text.starts_with("sloptopop collect: dry run, nothing fetched or run (ecosystems: go, node, python, swift)\n  run      osv-scanner          reg.example/analyzers/osv-scanner@sha256:"), "{text}");
+    assert!(text.ends_with("osv-scanner scan source -r --offline --format sarif . > .sloptopop/reports/osv-scanner.sarif\n"), "{text}");
     assert!(!root.join(".sloptopop/reports").exists(), "nothing written");
     for args in [
         &["collect", root_arg, "--only", "nope"][..],
         &["collect", root_arg, "--rules", "/nonexistent-rules"],
         &["collect", "--bogus"],
     ] {
-        let out = collect(args);
+        let out = collect_with(args, OsStr::new(""));
         assert_eq!(out.status.code(), Some(2), "{args:?}");
         assert!(out.stdout.is_empty(), "{args:?}");
     }
 }
 
 #[test]
-fn collect_in_containers_runs_only_pinned_images() {
-    let root = collect_fixture("collect-container");
-    let out = collect(&["collect", root.to_str().expect("UTF-8"), "--container"]);
-    assert_eq!(out.status.code(), Some(0), "exit 0");
-    let stdout = String::from_utf8_lossy(&out.stdout);
+fn collect_without_a_runtime_exits_3() {
+    let root = collect_fixture("collect-no-runtime");
+    let out = collect_with(
+        &["collect", root.to_str().expect("UTF-8")],
+        OsStr::new("/nonexistent"),
+    );
+    assert_eq!(out.status.code(), Some(3));
+    let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
-        stdout.starts_with("sloptopop collect: 0 ran, 0 failed, 0 missing, 18 skipped"),
-        "{stdout}"
+        stderr.starts_with("error: no container runtime found"),
+        "{stderr}"
     );
     assert!(
-        stdout.contains("  skipped  gitleaks         container image digest not pinned\n"),
-        "{stdout}"
+        stderr.contains("Tried: docker (not on PATH), podman (not on PATH)."),
+        "{stderr}"
     );
     assert!(
-        stdout.contains("  skipped  bandit           no container image catalogued\n"),
-        "{stdout}"
+        root.join(".sloptopop/reports/.collect.json").is_file(),
+        "recorded"
+    );
+}
+
+#[test]
+fn collect_host_tools_runs_unpinned_tools_with_a_warning() {
+    let root = collect_fixture("collect-host");
+    let out = collect_with(
+        &[
+            "collect",
+            root.to_str().expect("UTF-8"),
+            "--host-tools",
+            "--only",
+            "ruff",
+        ],
+        OsStr::new(FAKE_TOOLS),
+    );
+    assert_eq!(out.status.code(), Some(0));
+    assert!(
+        String::from_utf8_lossy(&out.stderr)
+            .starts_with("warning: --host-tools runs unpinned tool versions")
     );
     assert!(
-        !root.join(".fake-calls").exists(),
-        "the docker stub never ran"
+        String::from_utf8_lossy(&out.stdout).contains("  ran      ruff "),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
     );
 }

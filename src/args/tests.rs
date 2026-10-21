@@ -69,7 +69,7 @@ fn collect_defaults_to_the_current_directory() {
 fn collect_options_are_parsed_in_any_order() {
     let expected = Command::Collect(CollectOptions {
         root: "repo".to_owned(),
-        container: true,
+        source: Source::ContainerFlag,
         only: vec![
             "ruff".to_owned(),
             "gitleaks".to_owned(),
@@ -77,6 +77,11 @@ fn collect_options_are_parsed_in_any_order() {
         ],
         rules: Some("rules".to_owned()),
         dry_run: true,
+        offline: true,
+        registry: Some("mirror.example:5000/sloptopop".to_owned()),
+        runtime: Some("podman".to_owned()),
+        timeout: Some(60),
+        vuln_db: Some("20261020".to_owned()),
     });
     for args in [
         &[
@@ -89,13 +94,32 @@ fn collect_options_are_parsed_in_any_order() {
             "--dry-run",
             "--only",
             "bandit",
+            "--offline",
+            "--registry",
+            "mirror.example:5000/sloptopop/",
+            "--runtime",
+            "podman",
+            "--timeout",
+            "60",
+            "--vuln-db",
+            "20261020",
         ][..],
         &[
+            "--vuln-db",
+            "20261020",
+            "--timeout",
+            "60",
+            "--runtime",
+            "podman",
+            "--registry",
+            "mirror.example:5000/sloptopop",
+            "--offline",
             "--dry-run",
             "--only",
             "ruff",
             "--rules",
             "elsewhere",
+            "--container",
             "--container",
             "--only",
             "gitleaks,bandit",
@@ -106,6 +130,10 @@ fn collect_options_are_parsed_in_any_order() {
     ] {
         assert_eq!(collect(args), Ok(expected.clone()), "{args:?}");
     }
+    let Ok(Command::Collect(host)) = collect(&["--host-tools", "--host-tools"]) else {
+        panic!("host tools");
+    };
+    assert_eq!(host.source, Source::HostTools);
 }
 
 #[test]
@@ -114,6 +142,10 @@ fn collect_rejects_bad_arguments() {
         (&["--only"][..], "--only needs a value"),
         (&["--only", "--dry-run"], "--only needs a value"),
         (&["--rules"], "--rules needs a value"),
+        (&["--registry"], "--registry needs a value"),
+        (&["--runtime"], "--runtime needs a value"),
+        (&["--timeout"], "--timeout needs a value"),
+        (&["--vuln-db"], "--vuln-db needs a value"),
         (&["--only", "ruff,,bandit"], "--only has an empty tool name"),
         (&["--force"], "unrecognised option: --force"),
         (&["a", "b"], "unrecognised option or argument: b"),
@@ -121,9 +153,76 @@ fn collect_rejects_bad_arguments() {
             &["a", "--force"],
             "unrecognised option or argument: --force",
         ),
+        (
+            &["--host-tools", "--container"],
+            "--host-tools and --container exclude each other",
+        ),
+        (
+            &["--container", "--host-tools"],
+            "--host-tools and --container exclude each other",
+        ),
+        (
+            &["--runtime", "nerdctl"],
+            "unknown runtime: nerdctl (expected docker or podman)",
+        ),
+        (
+            &["--timeout", "0"],
+            "--timeout needs a whole number of seconds, not 0",
+        ),
+        (
+            &["--timeout", "soon"],
+            "--timeout needs a whole number of seconds, not soon",
+        ),
+        (
+            &["--vuln-db", "2026-10-20"],
+            "--vuln-db needs a date as YYYYMMDD, not 2026-10-20",
+        ),
+        (
+            &["--vuln-db", "2026102x"],
+            "--vuln-db needs a date as YYYYMMDD, not 2026102x",
+        ),
+        (
+            &["--vuln-db", "202610201"],
+            "--vuln-db needs a date as YYYYMMDD, not 202610201",
+        ),
     ] {
         assert_eq!(collect(args), Err(message.to_owned()), "{args:?}");
     }
+}
+
+#[test]
+fn registries_are_hosts_with_an_optional_port_and_path() {
+    for (value, expected) in [
+        ("registry.example", "registry.example"),
+        ("registry.example/", "registry.example"),
+        ("127.0.0.1:5000", "127.0.0.1:5000"),
+        (
+            "harbor.corp/proxy_cache/sloptopop",
+            "harbor.corp/proxy_cache/sloptopop",
+        ),
+    ] {
+        assert_eq!(registry(value), Ok(expected.to_owned()), "{value}");
+    }
+    for bad in [
+        "",
+        "/",
+        "https://registry.example",
+        "/abs",
+        "white space",
+        "a@b",
+    ] {
+        assert!(
+            registry(bad)
+                .unwrap_err()
+                .starts_with(&format!("not a registry: {bad} (")),
+            "{bad}"
+        );
+    }
+    assert!(
+        collect(&["--registry", "a@b"])
+            .unwrap_err()
+            .starts_with("not a registry: a@b (")
+    );
 }
 
 #[test]

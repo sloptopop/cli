@@ -30,10 +30,29 @@ rules:
       - metavariable-regex:
           metavariable: $URL
           regex: ^["'`]?https?://(?:localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|\[::1\])(?::\d+)?(?:[/?#]|["'`]?$)
-      # Already configurable: the literal is only the default.
+      # Already configurable: the literal is only the default, also after a
+      # call on the value (`process.env.X?.replace(...) || ...`) and as the
+      # last branch of a ternary on the variable.
       - pattern-not-inside: process.env.$NAME ?? $DEFAULT
       - pattern-not-inside: process.env.$NAME || $DEFAULT
       - pattern-not-inside: process.env[$NAME] ?? $DEFAULT
       - pattern-not-inside: process.env[$NAME] || $DEFAULT
       - pattern-not-inside: import.meta.env.$NAME ?? $DEFAULT
       - pattern-not-inside: import.meta.env.$NAME || $DEFAULT
+      - pattern-not-inside: process.env.$NAME.$METHOD(...) || "$URL"
+      - pattern-not-inside: process.env.$NAME.$METHOD(...) ?? "$URL"
+      - pattern-not-inside: process.env.$NAME?.$METHOD(...) || "$URL"
+      - pattern-not-inside: process.env.$NAME?.$METHOD(...) ?? "$URL"
+      - pattern-not-inside: 'process.env.$NAME ? $THEN : "$URL"'
+      - pattern-not-inside: 'import.meta.env.$NAME ? $THEN : "$URL"'
+      - pattern-not-inside: 'process.env.$NAME && $MORE ? $THEN : "$URL"'
+      # Opens no connection: compared, logged, or a synthetic cache key.
+      - pattern-not-inside: $VALUE === "$URL"
+      - pattern-not-inside: $VALUE !== "$URL"
+      - pattern-not-inside: $VALUE == "$URL"
+      - pattern-not-inside: $VALUE != "$URL"
+      - pattern-not-inside: $VALUE.startsWith("$URL")
+      - pattern-not-inside: $VALUE.endsWith("$URL")
+      - pattern-not-inside: $VALUE.includes("$URL")
+      - pattern-not-inside: console.$LOG(...)
+      - pattern-not-inside: new Request("$URL")

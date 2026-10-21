@@ -17,10 +17,15 @@ Commands:
   fix [path] [--apply]
                   Show the files that mechanical fixes would create;
                   --apply creates them (existing files are never touched)
-  collect [root] [--container] [--only <tool,...>] [--rules <dir>] [--dry-run]
-                  Run the installed analyzers with fixed flags and write
-                  their reports to .sloptopop/reports/ (see docs/collect.md);
-                  --dry-run prints the plan without running anything
+  collect [root] [--only <tool,...>] [--rules <dir>] [--dry-run] [--offline]
+          [--registry <host[/path]>] [--runtime docker|podman]
+          [--timeout <seconds>] [--vuln-db <YYYYMMDD>] [--host-tools]
+                  Run the applicable analyzers from sloptopop's pinned
+                  container images, with fixed flags, and write their
+                  reports to .sloptopop/reports/ (see docs/collect.md);
+                  --dry-run prints the plan without fetching or running
+                  anything; --host-tools runs unpinned tools from PATH
+                  instead (unsupported). Exit code 3: no container runtime
   transform [root] [--apply] [--branch <name>] [--backend <url>] [--yes]
             [--confirm <id,...> --by <name>] [--format text|json]
                   Plan verified transformations with the sloptopop backend
@@ -52,19 +57,42 @@ pub(crate) enum Format {
     Json,
 }
 
+/// Where `collect` takes the tools from.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum Source {
+    /// The pinned images (the default).
+    #[default]
+    Images,
+    /// The pinned images, with the old `--container` flag given (it has
+    /// no effect; only a note is printed).
+    ContainerFlag,
+    /// `--host-tools`: unpinned tools from `PATH` (unsupported).
+    HostTools,
+}
+
 /// The options of `collect`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct CollectOptions {
     /// The repository root (default: the current directory).
     pub(crate) root: String,
-    /// Run each tool from its pinned container image instead of `PATH`.
-    pub(crate) container: bool,
+    /// Where the tools come from.
+    pub(crate) source: Source,
     /// Only these catalogue entries (empty: every applicable entry).
     pub(crate) only: Vec<String>,
     /// The local rules directory for Opengrep and Semgrep.
     pub(crate) rules: Option<String>,
-    /// Print the plan without running anything.
+    /// Print the plan without fetching or running anything.
     pub(crate) dry_run: bool,
+    /// Never fetch: use only images and data already present.
+    pub(crate) offline: bool,
+    /// The registry to pull from instead of the default.
+    pub(crate) registry: Option<String>,
+    /// The container runtime to use: `docker` or `podman`.
+    pub(crate) runtime: Option<String>,
+    /// The time limit of each tool, in seconds.
+    pub(crate) timeout: Option<u64>,
+    /// The vulnerability snapshot to use instead of the newest, `YYYYMMDD`.
+    pub(crate) vuln_db: Option<String>,
 }
 
 /// The options of `transform`.
@@ -95,7 +123,7 @@ pub(crate) enum Command {
     Check(String, Format),
     /// `fix [path] [--apply]`.
     Fix(String, bool),
-    /// `collect [root] [--container] [--only <tool,...>] [--rules <dir>] [--dry-run]`.
+    /// `collect [root] [options]`.
     Collect(CollectOptions),
     /// `transform [root] …`.
     Transform(TransformOptions),
@@ -164,8 +192,19 @@ fn parse_collect(rest: &[&str]) -> Result<Command, String> {
     let mut rest = rest.iter();
     while let Some(&arg) = rest.next() {
         match arg {
-            "--container" => options.container = true,
+            "--container" | "--host-tools" => {
+                let wanted = if arg == "--container" {
+                    Source::ContainerFlag
+                } else {
+                    Source::HostTools
+                };
+                if options.source != Source::Images && options.source != wanted {
+                    return Err("--host-tools and --container exclude each other".into());
+                }
+                options.source = wanted;
+            }
             "--dry-run" => options.dry_run = true,
+            "--offline" => options.offline = true,
             "--only" => {
                 for name in value(arg, rest.next())?.split(',') {
                     if name.is_empty() {
@@ -175,12 +214,55 @@ fn parse_collect(rest: &[&str]) -> Result<Command, String> {
                 }
             }
             "--rules" => options.rules = Some(value(arg, rest.next())?.to_owned()),
+            "--registry" => options.registry = Some(registry(value(arg, rest.next())?)?),
+            "--runtime" => {
+                options.runtime = Some(match value(arg, rest.next())? {
+                    name @ ("docker" | "podman") => name.to_owned(),
+                    other => {
+                        return Err(format!(
+                            "unknown runtime: {other} (expected docker or podman)"
+                        ));
+                    }
+                });
+            }
+            "--timeout" => {
+                let seconds = value(arg, rest.next())?;
+                options.timeout = Some(seconds.parse().ok().filter(|&s: &u64| s > 0).ok_or_else(
+                    || format!("--timeout needs a whole number of seconds, not {seconds}"),
+                )?);
+            }
+            "--vuln-db" => {
+                let date = value(arg, rest.next())?;
+                if date.len() != 8 || !date.bytes().all(|b| b.is_ascii_digit()) {
+                    return Err(format!("--vuln-db needs a date as YYYYMMDD, not {date}"));
+                }
+                options.vuln_db = Some(date.to_owned());
+            }
             path if root.is_none() => root = Some(checked_path(path)?),
             _ => return Err(format!("unrecognised option or argument: {arg}")),
         }
     }
     options.root = root.unwrap_or_else(|| ".".to_owned());
     Ok(Command::Collect(options))
+}
+
+/// A registry given with `--registry` (or `SLOPTOPOP_REGISTRY`): a host,
+/// optionally with a port and a path, without scheme or trailing slash.
+pub(crate) fn registry(value: &str) -> Result<String, String> {
+    let trimmed = value.trim_end_matches('/');
+    let valid = !trimmed.is_empty()
+        && !trimmed.contains("://")
+        && !trimmed.starts_with('/')
+        && trimmed
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_' | b':' | b'/'));
+    if valid {
+        Ok(trimmed.to_owned())
+    } else {
+        Err(format!(
+            "not a registry: {value} (expected a host, optionally with a port and a path, e.g. registry.example.com/mirror)"
+        ))
+    }
 }
 
 fn parse_transform(rest: &[&str]) -> Result<Command, String> {

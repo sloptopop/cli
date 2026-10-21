@@ -3,7 +3,7 @@
 The `sloptopop` command-line tool and JSON-RPC server.
 
 ```
-sloptopop collect [root]     # run the installed analyzers into .sloptopop/reports/
+sloptopop collect [root]     # run the analyzers from pinned images into .sloptopop/reports/
 sloptopop check [root]       # check the repository, reading those reports
 sloptopop fix [root]         # show (or --apply) mechanical fixes
 sloptopop transform [root]   # plan, apply and verify code transformations (preview)
@@ -20,15 +20,16 @@ them. See [commands.md](docs/commands.md#transform-preview) and
 [safety.md](docs/safety.md#what-leaves-your-machine). No command sends
 usage data or checks for updates.
 
-`sloptopop collect` runs the open-source analyzers you already have
-installed (gitleaks, OSV-Scanner, Ruff, golangci-lint and more) with fixed,
-offline flags, each as a separate process; it never installs or bundles a
-tool. Opengrep and Semgrep run with sloptopop's own rule pack
-([rules/](rules/README.md), MIT OR Apache-2.0), never with registry rules.
-eslint-plugin-sonarjs and SonarAnalyzer.CSharp, pinned to their last
-LGPL-3.0 releases, run from a sloptopop-managed directory
-(`.sloptopop/tools/`) once you install them there with one command.
-See [docs/collect.md](docs/collect.md) for every tool, licence and flag.
+`sloptopop collect` runs the open-source analyzers that apply to your
+repository (gitleaks, OSV-Scanner, Opengrep, Ruff, golangci-lint and more),
+each from a container image sloptopop built from the tool's release and
+pinned by digest, so every machine runs the versions sloptopop tested. Each
+runs with fixed flags, without network, with your repository read-only. It
+needs a container runtime (Docker Engine, Podman, Colima, Rancher Desktop
+or Docker Desktop) and never falls back to the tools on your `PATH`.
+Opengrep runs with sloptopop's own rule pack ([rules/](rules/README.md),
+MIT OR Apache-2.0), never with registry rules. See
+[docs/collect.md](docs/collect.md) for every tool, image, licence and flag.
 
 ## Documentation
 

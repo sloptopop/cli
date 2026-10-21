@@ -152,23 +152,25 @@ For the machine-readable Report, run `sloptopop check --format json` (see
 
 ## 3. Collect analyzer reports
 
-`sloptopop collect` runs the open-source analyzers you have installed and
-saves their reports for the next `check`. First see what it would run:
+`sloptopop collect` runs the open-source analyzers that apply, each from
+its pinned container image, and saves their reports for the next `check`.
+It needs a container runtime (see [install.md](install.md#analyzers-a-container-runtime)).
+First see what it would run:
 
 ```sh
 sloptopop collect --dry-run
 ```
 
-Each line shows a tool as `run`, `missing` (not installed) or `skipped`,
-with the exact command line. Install the ones you want (see
-[analyzers.md](analyzers.md)), then run it for real:
+Each line shows a tool as `run` (with its image, version and download
+size, and the exact command line) or `skipped`. Then run it for real:
 
 ```sh
 sloptopop collect
 sloptopop check
 ```
 
-With gitleaks installed, its result for `scripts/upload.js` also appears as
+The first run prints a `fetch` line for each image before it downloads it;
+the next runs reuse them. gitleaks' result for `scripts/upload.js` also appears as
 `secrets.committed`. Other analyzers' problems appear as
 `analyzer.finding`, with the tool and its own rule id. `collect` also makes
 sure git ignores `.sloptopop/reports/`, because reports can hold secret

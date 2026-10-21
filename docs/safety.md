@@ -25,8 +25,9 @@ The short version:
   in the backend, and anything it proposes passes the same Guider checks.
 - Each edit has fixed text. For example, an unchecked write always gets
   exactly `.throwOnError()` at the end of its query chain.
-- The analyzers that `sloptopop collect` runs get fixed flags, so the same
-  tool versions give the same reports.
+- The analyzers that `sloptopop collect` runs come from pinned container
+  images and get fixed flags, so the same repository gives the same
+  reports on every machine.
 
 So you can run sloptopop twice and compare, review a plan before applying
 it, and reproduce any result later.
@@ -85,7 +86,9 @@ The reason codes are explained in
 
 `sloptopop check` and `sloptopop collect` never change your source files.
 `collect` writes only under `.sloptopop/`, plus a `.gitignore` line there
-for the reports. `sloptopop fix` only creates missing files, and never
+for the reports. The analyzers it runs see your repository read-only, in
+containers without network, capabilities or privileges, and can write
+only to `.sloptopop/reports/` (see [collect.md](collect.md#how-a-tool-runs)). `sloptopop fix` only creates missing files, and never
 overwrites or edits an existing one. Without `--apply` it writes nothing.
 
 `sloptopop transform` (preview) is built to these rules:
@@ -125,7 +128,7 @@ overwrites or edits an existing one. Without `--apply` it writes nothing.
 | Command | What it sends to sloptopop |
 |---|---|
 | `check`, `fix` | Nothing. The engine runs locally. |
-| `collect` | Nothing to sloptopop. Two analyzers use the network themselves: OSV-Scanner downloads its vulnerability database (your dependency list stays local), and govulncheck looks up module paths in the Go vulnerability database. See [collect.md](collect.md#why-these-flags). |
+| `collect` | Nothing about your code. It fetches the analyzer images and the daily vulnerability snapshots from sloptopop's component library (or your mirror), each announced before it is fetched; no analyzer has network. For Go and .NET projects, a prepare step downloads your project's own dependencies from your module or package registries. See [collect.md](collect.md#how-a-tool-runs). |
 | `transform` (preview) | One request to the backend you name: the Report, the text files of the commit `HEAD` points to with secret values masked, and `.sloptopop/context.json` if you have one. The plan and the verification results come back. |
 
 What `transform` uploads, exactly:

@@ -30,3 +30,7 @@ rules:
       - pattern-not-inside: os.getenv($NAME, $DEFAULT)
       - pattern-not-inside: os.environ.get($NAME) or $DEFAULT
       - pattern-not-inside: os.getenv($NAME) or $DEFAULT
+      # A pydantic settings field: the environment overrides the default.
+      - pattern-not-inside: |
+          class $SETTINGS(..., BaseSettings, ...):
+              ...

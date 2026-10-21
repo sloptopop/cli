@@ -13,8 +13,9 @@
 //! backend with `curl`, after showing what it sends and asking: the only
 //! network call sloptopop makes (see `docs/commands.md`).
 //!
-//! `sloptopop collect` runs the installed analyzers from a checked-in
-//! catalogue with fixed flags, each as a separate process, and writes their
+//! `sloptopop collect` runs the analyzers that apply from sloptopop's
+//! pinned container images (a checked-in catalogue, every image by digest),
+//! with fixed flags, each in its own hardened container, and writes their
 //! reports to `.sloptopop/reports/` for the engine to read (see
 //! `docs/collect.md`).
 //!
@@ -23,13 +24,14 @@
 //! A module imports only from modules in strictly lower layers; modules in
 //! the same layer know nothing of each other. Bottom to top:
 //!
-//! 0. `args`, `collect_detect`, `collect_gitignore`, `collect_lookup`,
-//!    `collect_managed`, `collect_pack`, `diagnostic`, `engine_locate`,
+//! 0. `args`, `collect_convert`, `collect_detect`, `collect_gitignore`,
+//!    `collect_lookup`, `collect_pack`, `diagnostic`, `engine_locate`,
 //!    `framing`, `handshake`, `json_fields`, `jsonrpc`, `backend_post`
 //!    (no crate imports)
-//! 1. `collect_catalogue`, `engine_run`, `render_fix`, `render_manifest`,
-//!    `render_report`, `schema`, `session`
-//! 2. `collect_plan`, `command_io`, `server`
+//! 1. `collect_catalogue`, `collect_runtime`, `engine_run`, `render_fix`,
+//!    `render_manifest`, `render_report`, `schema`, `session`
+//! 2. `collect_container`, `collect_data`, `collect_image`, `collect_plan`,
+//!    `command_io`, `server`
 //! 3. `check_command`, `collect_run`, `fix_command`, `transform_command`
 //! 4. `collect_record`
 //! 5. `collect_command`
@@ -48,14 +50,18 @@ mod check_command;
 pub mod cli;
 mod collect_catalogue;
 mod collect_command;
+mod collect_container;
+mod collect_convert;
+mod collect_data;
 mod collect_detect;
 mod collect_gitignore;
+mod collect_image;
 mod collect_lookup;
-mod collect_managed;
 mod collect_pack;
 mod collect_plan;
 mod collect_record;
 mod collect_run;
+mod collect_runtime;
 mod command_io;
 mod diagnostic;
 mod engine_locate;

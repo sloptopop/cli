@@ -7,7 +7,7 @@ usage error (exit code 2).
 ```
 sloptopop check [path] [--format text|json]
 sloptopop fix [path] [--apply]
-sloptopop collect [root] [--container] [--only <tool,...>] [--rules <dir>] [--dry-run]
+sloptopop collect [root] [--only <tool,...>] [--rules <dir>] [--dry-run] [--offline] …
 sloptopop transform [root] [--apply] [--branch <name>] [--backend <url>] [--yes]
                     [--confirm <id,...> --by <name>] [--format text|json]   (preview)
 sloptopop serve --stdio
@@ -26,7 +26,7 @@ with `-`.
 | 0 | Success. For `check`: the repository passed. For `transform`: every automated step was applied (with `--apply`) or can be (dry run). |
 | 1 | For `check`: the repository did not pass. For `transform`: a step is waiting for a confirmation, was refused, or is blocked by one that was. For `collect`: it could not write the reports directory, the rule pack, `.collect.json` or its output. For `serve`: the session ended without `shutdown`, or a framing error. |
 | 2 | Usage error: an unknown command or option, a missing value, an unknown format or tool, a root or rules directory that does not exist. The message and the usage text go to stderr. |
-| 3 | `check`, `fix` and `transform`: the engine is missing, could not be started, failed, or printed something that is not JSON. For `transform` this includes the engine refusing to start: not the top of a git repository, uncommitted or untracked changes, `HEAD` moved since the request, a branch that exists, a confirmation that is not allowed. |
+| 3 | `collect`: no container runtime answered (nothing ran). `check`, `fix` and `transform`: the engine is missing, could not be started, failed, or printed something that is not JSON. For `transform` this includes the engine refusing to start: not the top of a git repository, uncommitted or untracked changes, `HEAD` moved since the request, a branch that exists, a confirmation that is not allowed. |
 | 4 | `transform`: the upload was not confirmed, `curl` is not on `PATH`, or the backend could not be reached or refused the request. |
 
 ## `check`
@@ -87,22 +87,34 @@ failed. The JSON the engine prints is described in
 ## `collect`
 
 ```
-sloptopop collect [root] [--container] [--only <tool,...>] [--rules <dir>] [--dry-run]
+sloptopop collect [root] [--only <tool,...>] [--rules <dir>] [--dry-run] [--offline]
+                  [--registry <host[/path]>] [--runtime docker|podman]
+                  [--timeout <seconds>] [--vuln-db <YYYYMMDD>] [--host-tools]
 ```
 
-Runs the open-source analyzers you have installed, each with fixed flags,
+Runs the open-source analyzers that apply, each from the container image
+sloptopop built and pinned by digest for this release, with fixed flags,
 and writes their reports to `.sloptopop/reports/`. The next `check` reads
-them. It never installs or downloads a tool.
+them. Every image (and every vulnerability snapshot) is announced before
+it is fetched, then verified by digest. It needs a container runtime and
+never falls back to the tools on your `PATH`.
 
 | Option | Meaning |
 |---|---|
 | `--only <tool,...>` | Run only these catalogue entries. Repeatable. It never adds an entry whose ecosystem was not detected. An unknown name is a usage error. |
 | `--rules <dir>` | Use only this directory of rules for Opengrep and Semgrep, instead of sloptopop's own rule pack plus `.sloptopop/rules/`. |
-| `--container` | Run each tool from a digest-pinned container image instead of from `PATH`. |
-| `--dry-run` | Print the plan (tools, command lines, outputs) and run nothing. Nothing is written. |
+| `--dry-run` | Print the plan (images with version and size, command lines, outputs); fetch and run nothing. Nothing is written. |
+| `--offline` | Fetch nothing; use the images and vulnerability snapshots already on this machine. |
+| `--registry <host[/path]>` | Pull from this mirror or proxy of the component library (also `SLOPTOPOP_REGISTRY`). |
+| `--runtime docker\|podman` | Use only this container runtime (also `SLOPTOPOP_CONTAINER_RUNTIME`). |
+| `--timeout <seconds>` | The time limit of each tool (default 1800). |
+| `--vuln-db <YYYYMMDD>` | Use that day's vulnerability snapshot instead of the newest. |
+| `--host-tools` | Unsupported: run the tools on your `PATH`, unpinned, with a warning on every run. |
+| `--container` | Accepted for compatibility (containers are the default); prints a note. |
 
-Exit code 0 whatever the tools found or did. A tool that is missing or
-fails is reported, and the others still run. The full reference, with
+Exit code 0 whatever the tools found or did; 3 if no container runtime
+answers (then nothing runs, and the message says what to install). A tool
+that fails is reported, and the others still run. The full reference, with
 every tool, flag and licence, is [collect.md](collect.md). An overview by
 language is in [analyzers.md](analyzers.md).
 
@@ -261,7 +273,12 @@ text and exit 0.
 | Variable | Used by | Meaning |
 |---|---|---|
 | `SLOPTOPOP_ENGINE` | `check`, `fix`, `transform` | Full path of the `sloptopop-engine` binary. When set and not empty, it is used as given. |
-| `PATH` | `check`, `fix`, `transform`, `collect` | Searched for `sloptopop-engine` (after the directory of `sloptopop`), by `transform` for `curl`, and by `collect` for the analyzers and `docker`. |
+| `PATH` | `check`, `fix`, `transform`, `collect` | Searched for `sloptopop-engine` (after the directory of `sloptopop`), by `transform` for `curl`, by `collect` for `docker` and `podman` (and, under `--host-tools`, the analyzers). |
+| `SLOPTOPOP_REGISTRY` | `collect` | The registry the analyzer images and vulnerability snapshots are pulled from (default `components.sloptopop.dev`); `--registry` wins. |
+| `SLOPTOPOP_CONTAINER_RUNTIME` | `collect` | `docker` or `podman`: the only runtime to use; `--runtime` wins. |
+| `SLOPTOPOP_COLLECT_MEMORY`, `SLOPTOPOP_COLLECT_CPUS` | `collect` | Each tool's memory limit (default `4g`) and an optional CPU cap. |
+| `SLOPTOPOP_CACHE_DIR` | `collect` | Where vulnerability snapshots are unpacked (default `$XDG_CACHE_HOME/sloptopop`, `~/.cache/sloptopop` or `%LOCALAPPDATA%\\sloptopop\\cache`). |
+| `GOPROXY`, `GOPRIVATE`, `GONOPROXY`, `GONOSUMDB`, `GONOSUMCHECK`, `GOINSECURE` | `collect` | Passed to the `go mod download` prepare step of Go projects. |
 | `SLOPTOPOP_BIN` | language libraries | Path of the `sloptopop` binary a library starts (see [PROTOCOL.md](../PROTOCOL.md)). |
 
 ## The engine: `sloptopop-engine`
