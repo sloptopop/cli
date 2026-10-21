@@ -74,6 +74,7 @@ ignore them.
 | `findings[].fix` | A mechanical fix, when one exists: `{ "kind": "createFile", "path", "template" }`. Applied by `sloptopop fix --apply`, which never overwrites a file. |
 | `findings[].remediation` | How to fix it, as text. Present on every finding. |
 | `findings[].origin` | For a finding taken from an analyzer report: `{ "tool", "rule" }`, the tool's name in lower case and its own rule identifier. Omitted for the engine's own findings. |
+| `findings[].analyzerFix` | Planned (WP-21, from Report schema version 2): the analyzer's own safe fix for this finding, as the server verified its bytes: `{ "tool", "version", "component", "source", "rule", "applicability", "toolApplicability", "description", "path", "file", "edits": [{ "start", "end", "digest", "text" }], "report" }`, offsets in bytes. `sloptopop check` shows it; only `sloptopop transform` applies it, after the server verifies the change. Omitted when there is none. |
 | `controls[]` | Every control of the profile, in order: `id`, `title`, `status` (`pass`, `fail`, or `notChecked` when the engine has no check for it). |
 | `passed` | Whether the repository meets the profile. `sloptopop check` exits 0 when `true`, 1 when `false`. |
 | `analysis` | What the analyzer reports in `.sloptopop/reports/` held. Always present; its lists are empty and its counts zero when there are no reports. |

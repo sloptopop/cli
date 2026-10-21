@@ -407,7 +407,7 @@ fn missing_engine_exits_3_with_a_hint() {
 
 /// Every entry that runs on the fixture, with the exit code the fake
 /// runtime's tool reports findings with and the report it writes.
-const RAN: [(&str, i64, &str); 22] = [
+const RAN: [(&str, i64, &str); 21] = [
     ("gitleaks", 0, "gitleaks.sarif"),
     ("gitleaks-history", 0, "gitleaks.history.sarif"),
     ("osv-scanner", 1, "osv-scanner.sarif"),
@@ -420,7 +420,6 @@ const RAN: [(&str, i64, &str); 22] = [
     ("oxlint", 1, "oxlint.sarif"),
     ("biome", 1, "biome.sarif"),
     ("eslint-sonarjs", 1, "eslint-sonarjs.sarif"),
-    ("eslint-sonarjs-json", 1, "eslint-sonarjs.json"),
     ("eslint-typescript", 1, "eslint-typescript.sarif"),
     ("dependency-cruiser", 0, "dependency-cruiser.sarif"),
     ("staticcheck", 1, "staticcheck.sarif"),
@@ -441,7 +440,7 @@ fn collect_runs_pinned_images_and_check_reads_their_reports() {
     assert_eq!(out.status.code(), Some(0), "exit 0: {stdout}");
     assert!(
         stdout.contains(
-            "sloptopop collect: 20 ran, 0 failed, 0 missing, 2 skipped (ecosystems: go, node, python, swift)\n"
+            "sloptopop collect: 19 ran, 0 failed, 0 missing, 2 skipped (ecosystems: go, node, python, swift)\n"
         ),
         "{stdout}"
     );
@@ -535,7 +534,7 @@ fn collect_mounts_the_built_in_pack_then_the_local_rules() {
         )),
         "{calls}"
     );
-    assert!(calls.contains("scan --sarif --metrics off --disable-version-check --no-rewrite-rule-ids --config /rules/0 --config /rules/1 ."), "{calls}");
+    assert!(calls.contains("scan --json --metrics off --disable-version-check --no-rewrite-rule-ids --config /rules/0 --config /rules/1 ."), "{calls}");
     assert!(
         pack.join("supabase/unchecked-write.yaml").is_file(),
         "the pack is written"

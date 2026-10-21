@@ -1,0 +1,206 @@
+{
+ "version": "2.1.0",
+ "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+ "runs": [
+  {
+   "tool": {
+    "driver": {
+     "name": "Staticcheck",
+     "version": "2026.2.2",
+     "informationUri": "https://staticcheck.dev",
+     "rules": [
+      {
+       "id": "S1005",
+       "shortDescription": {
+        "text": "Drop unnecessary use of the blank identifier",
+        "markdown": "Drop unnecessary use of the blank identifier"
+       },
+       "help": {
+        "text": "Drop unnecessary use of the blank identifier\n\nIn many cases, assigning to the blank identifier is unnecessary.\n\nBefore:\n\n```go\nfor _ = range s {}\n_ = <-ch\n```\n\nAfter:\n\n```go\nfor range s{}\n<-ch\n```\n\n\n",
+        "markdown": "Drop unnecessary use of the blank identifier\n\nIn many cases, assigning to the blank identifier is unnecessary.\n\nBefore:\n\n```go\nfor _ = range s {}\n_ = <-ch\n```\n\nAfter:\n\n```go\nfor range s{}\n<-ch\n```\n\n\n"
+       },
+       "helpUri": "https://staticcheck.dev/docs/checks#S1005",
+       "defaultConfiguration": {
+        "enabled": true,
+        "level": "warning"
+       }
+      }
+     ]
+    }
+   },
+   "results": [
+    {
+     "ruleId": "S1005",
+     "kind": "fail",
+     "message": {
+      "text": "unnecessary assignment to the blank identifier"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "ascii.go",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "startLine": 5,
+         "startColumn": 18,
+         "endLine": 5,
+         "endColumn": 19
+        }
+       }
+      }
+     ],
+     "fixes": [
+      {
+       "description": {
+        "text": "Remove assignment to blank identifier"
+       },
+       "artifactChanges": [
+        {
+         "artifactLocation": {
+          "uri": "ascii.go",
+          "uriBaseId": "%SRCROOT%"
+         },
+         "replacements": [
+          {
+           "deletedRegion": {
+            "startLine": 5,
+            "startColumn": 16,
+            "endLine": 5,
+            "endColumn": 19
+           },
+           "insertedContent": {
+            "text": ""
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suppressions": []
+    },
+    {
+     "ruleId": "S1005",
+     "kind": "fail",
+     "message": {
+      "text": "unnecessary assignment to the blank identifier"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "crlf/crlf.go",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "startLine": 5,
+         "startColumn": 22,
+         "endLine": 5,
+         "endColumn": 23
+        }
+       }
+      }
+     ],
+     "fixes": [
+      {
+       "description": {
+        "text": "Remove assignment to blank identifier"
+       },
+       "artifactChanges": [
+        {
+         "artifactLocation": {
+          "uri": "crlf/crlf.go",
+          "uriBaseId": "%SRCROOT%"
+         },
+         "replacements": [
+          {
+           "deletedRegion": {
+            "startLine": 5,
+            "startColumn": 20,
+            "endLine": 5,
+            "endColumn": 23
+           },
+           "insertedContent": {
+            "text": ""
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suppressions": []
+    },
+    {
+     "ruleId": "S1005",
+     "kind": "fail",
+     "message": {
+      "text": "unnecessary assignment to the blank identifier"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "nonascii.go",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "startLine": 5,
+         "startColumn": 22,
+         "endLine": 5,
+         "endColumn": 23
+        }
+       }
+      }
+     ],
+     "fixes": [
+      {
+       "description": {
+        "text": "Remove assignment to blank identifier"
+       },
+       "artifactChanges": [
+        {
+         "artifactLocation": {
+          "uri": "nonascii.go",
+          "uriBaseId": "%SRCROOT%"
+         },
+         "replacements": [
+          {
+           "deletedRegion": {
+            "startLine": 5,
+            "startColumn": 20,
+            "endLine": 5,
+            "endColumn": 23
+           },
+           "insertedContent": {
+            "text": ""
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suppressions": []
+    }
+   ],
+   "invocations": [
+    {
+     "arguments": [
+      "-f",
+      "sarif",
+      "-checks",
+      "S1005",
+      "./..."
+     ],
+     "workingDirectory": {
+      "uri": "file:///src"
+     },
+     "executionSuccessful": true
+    }
+   ]
+  }
+ ]
+}

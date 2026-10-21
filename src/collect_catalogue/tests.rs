@@ -56,7 +56,6 @@ fn the_required_tools_are_catalogued() {
         "oxlint",
         "biome",
         "eslint-sonarjs",
-        "eslint-sonarjs-json",
         "eslint-typescript",
         "dependency-cruiser",
         "staticcheck",
@@ -248,7 +247,7 @@ fn entries_sharing_an_image_share_its_digest() {
         Kind::NeedsGit(GITLEAKS),
         "history needs git"
     );
-    assert_eq!(entry("eslint-sonarjs-json").kind, Kind::Run(ESLINT_SONARJS));
+    assert_eq!(entry("eslint-sonarjs").kind, Kind::Run(ESLINT_SONARJS));
 }
 
 #[test]
@@ -386,7 +385,7 @@ fn arguments_render_outputs_rules_and_directories() {
         [
             "opengrep",
             "scan",
-            "--sarif",
+            "--json",
             "--no-rewrite-rule-ids",
             "--config",
             "/rules/0",
@@ -458,7 +457,7 @@ fn security_relevant_flags_are_present() {
         ),
         "no caps"
     );
-    for name in ["eslint-sonarjs", "eslint-sonarjs-json", "eslint-typescript"] {
+    for name in ["eslint-sonarjs", "eslint-typescript"] {
         assert!(has(entry(name), &["--no-inline-config"]), "{name}");
         assert!(
             has(entry(name), &["--no-error-on-unmatched-pattern"]),
@@ -514,4 +513,64 @@ fn the_catalogue_is_the_reviewed_one() {
         first.map_or(shown.lines().count().min(reviewed.lines().count()), |n| n
             + 1)
     );
+}
+
+/// WP-21: every tool whose fixes only another format carries runs in that
+/// format, and collect converts it, keeping the fixes.
+#[test]
+fn fix_carrying_tools_run_in_their_fix_carrying_format() {
+    let expected = [
+        (
+            "ruff",
+            Converter::RuffJson,
+            &["--output-format", "json"][..],
+        ),
+        (
+            "eslint-sonarjs",
+            Converter::EslintJson,
+            &["--format", "json-with-metadata"][..],
+        ),
+        (
+            "eslint-typescript",
+            Converter::EslintJson,
+            &["--format", "json-with-metadata"][..],
+        ),
+        (
+            "biome",
+            Converter::BiomeRdjson,
+            &["--reporter=rdjson", "--max-diagnostics=none"][..],
+        ),
+        ("opengrep", Converter::SemgrepJson, &["scan", "--json"][..]),
+        ("semgrep", Converter::SemgrepJson, &["scan", "--json"][..]),
+    ];
+    for (name, converter, flags) in expected {
+        let tool = entry(name);
+        assert_eq!(tool.convert.map(|(c, _)| c), Some(converter), "{name}");
+        assert!(has(tool, flags), "{name}: {flags:?}");
+    }
+    for tool in CATALOGUE {
+        assert_eq!(
+            tool.sarif_fixes,
+            (tool.name == "staticcheck").then_some(Columns::Utf8Bytes),
+            "{}: only staticcheck's own SARIF fixes are kept",
+            tool.name
+        );
+    }
+}
+
+#[test]
+fn golangci_lint_names_the_configuration_it_refuses() {
+    for tool in CATALOGUE {
+        assert_eq!(
+            tool.refusals.is_empty(),
+            tool.name != "golangci-lint",
+            "{}",
+            tool.name
+        );
+    }
+    let [(needle, reason)] = entry("golangci-lint").refusals else {
+        panic!("one refusal");
+    };
+    assert_eq!(*needle, "unsupported version of the configuration");
+    assert!(reason.contains("golangci-lint migrate") && reason.contains("no report"));
 }

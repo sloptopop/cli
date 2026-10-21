@@ -89,6 +89,17 @@ fn finding_lines(finding: &Value) -> String {
             text(&finding["fix"], "path")
         ));
     }
+    let analyzer = &finding["analyzerFix"];
+    if analyzer.is_object() {
+        let edits = list(analyzer, "edits").len();
+        out.push(format!(
+            "    analyzer fix: {} {} ({}, {edits} edit{}); applied only by `sloptopop transform`, after the server verifies it\n",
+            text(analyzer, "tool"),
+            text(analyzer, "rule"),
+            text(analyzer, "applicability"),
+            if edits == 1 { "" } else { "s" },
+        ));
+    }
     let remediation = text(finding, "remediation");
     if !remediation.is_empty() {
         out.push(format!("    how: {remediation}\n"));

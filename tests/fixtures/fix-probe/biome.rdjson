@@ -1,0 +1,440 @@
+{
+  "source": {
+    "name": "Biome",
+    "url": "https://biomejs.dev"
+  },
+  "diagnostics": [
+    {
+      "code": {
+        "url": "https://biomejs.dev/linter/rules/use-const",
+        "value": "lint/style/useConst"
+      },
+      "location": {
+        "path": "ascii.js",
+        "range": {
+          "end": {
+            "column": 20,
+            "line": 1
+          },
+          "start": {
+            "column": 17,
+            "line": 1
+          }
+        }
+      },
+      "message": "This let declares a variable that is only assigned once.",
+      "severity": "WARNING",
+      "suggestions": [
+        {
+          "range": {
+            "end": {
+              "column": 20,
+              "line": 1
+            },
+            "start": {
+              "column": 17,
+              "line": 1
+            }
+          },
+          "text": "const"
+        }
+      ]
+    },
+    {
+      "code": {
+        "url": "https://biomejs.dev/linter/rules/no-unused-variables",
+        "value": "lint/correctness/noUnusedVariables"
+      },
+      "location": {
+        "path": "ascii.js",
+        "range": {
+          "end": {
+            "column": 6,
+            "line": 2
+          },
+          "start": {
+            "column": 5,
+            "line": 2
+          }
+        }
+      },
+      "message": "This variable u is unused.",
+      "severity": "WARNING",
+      "suggestions": [
+        {
+          "range": {
+            "end": {
+              "column": 6,
+              "line": 2
+            },
+            "start": {
+              "column": 5,
+              "line": 2
+            }
+          },
+          "text": "_u"
+        }
+      ]
+    },
+    {
+      "code": {
+        "url": "https://biomejs.dev/linter/rules/use-const",
+        "value": "lint/style/useConst"
+      },
+      "location": {
+        "path": "bom.js",
+        "range": {
+          "end": {
+            "column": 21,
+            "line": 1
+          },
+          "start": {
+            "column": 18,
+            "line": 1
+          }
+        }
+      },
+      "message": "This let declares a variable that is only assigned once.",
+      "severity": "WARNING",
+      "suggestions": [
+        {
+          "range": {
+            "end": {
+              "column": 21,
+              "line": 1
+            },
+            "start": {
+              "column": 18,
+              "line": 1
+            }
+          },
+          "text": "const"
+        }
+      ]
+    },
+    {
+      "code": {
+        "url": "https://biomejs.dev/linter/rules/no-unused-variables",
+        "value": "lint/correctness/noUnusedVariables"
+      },
+      "location": {
+        "path": "bom.js",
+        "range": {
+          "end": {
+            "column": 6,
+            "line": 2
+          },
+          "start": {
+            "column": 5,
+            "line": 2
+          }
+        }
+      },
+      "message": "This variable u is unused.",
+      "severity": "WARNING",
+      "suggestions": [
+        {
+          "range": {
+            "end": {
+              "column": 6,
+              "line": 2
+            },
+            "start": {
+              "column": 5,
+              "line": 2
+            }
+          },
+          "text": "_u"
+        }
+      ]
+    },
+    {
+      "code": {
+        "url": "https://biomejs.dev/linter/rules/use-const",
+        "value": "lint/style/useConst"
+      },
+      "location": {
+        "path": "crlf.js",
+        "range": {
+          "end": {
+            "column": 20,
+            "line": 1
+          },
+          "start": {
+            "column": 17,
+            "line": 1
+          }
+        }
+      },
+      "message": "This let declares a variable that is only assigned once.",
+      "severity": "WARNING",
+      "suggestions": [
+        {
+          "range": {
+            "end": {
+              "column": 20,
+              "line": 1
+            },
+            "start": {
+              "column": 17,
+              "line": 1
+            }
+          },
+          "text": "const"
+        }
+      ]
+    },
+    {
+      "code": {
+        "url": "https://biomejs.dev/linter/rules/no-unused-variables",
+        "value": "lint/correctness/noUnusedVariables"
+      },
+      "location": {
+        "path": "crlf.js",
+        "range": {
+          "end": {
+            "column": 6,
+            "line": 2
+          },
+          "start": {
+            "column": 5,
+            "line": 2
+          }
+        }
+      },
+      "message": "This variable u is unused.",
+      "severity": "WARNING",
+      "suggestions": [
+        {
+          "range": {
+            "end": {
+              "column": 6,
+              "line": 2
+            },
+            "start": {
+              "column": 5,
+              "line": 2
+            }
+          },
+          "text": "_u"
+        }
+      ]
+    },
+    {
+      "code": {
+        "url": "https://biomejs.dev/linter/rules/use-const",
+        "value": "lint/style/useConst"
+      },
+      "location": {
+        "path": "nonascii.js",
+        "range": {
+          "end": {
+            "column": 20,
+            "line": 1
+          },
+          "start": {
+            "column": 17,
+            "line": 1
+          }
+        }
+      },
+      "message": "This let declares a variable that is only assigned once.",
+      "severity": "WARNING",
+      "suggestions": [
+        {
+          "range": {
+            "end": {
+              "column": 20,
+              "line": 1
+            },
+            "start": {
+              "column": 17,
+              "line": 1
+            }
+          },
+          "text": "const"
+        }
+      ]
+    },
+    {
+      "code": {
+        "url": "https://biomejs.dev/linter/rules/no-unused-variables",
+        "value": "lint/correctness/noUnusedVariables"
+      },
+      "location": {
+        "path": "nonascii.js",
+        "range": {
+          "end": {
+            "column": 6,
+            "line": 2
+          },
+          "start": {
+            "column": 5,
+            "line": 2
+          }
+        }
+      },
+      "message": "This variable u is unused.",
+      "severity": "WARNING",
+      "suggestions": [
+        {
+          "range": {
+            "end": {
+              "column": 6,
+              "line": 2
+            },
+            "start": {
+              "column": 5,
+              "line": 2
+            }
+          },
+          "text": "_u"
+        }
+      ]
+    },
+    {
+      "code": {
+        "url": "https://biomejs.dev/linter/rules/no-double-equals",
+        "value": "lint/suspicious/noDoubleEquals"
+      },
+      "location": {
+        "path": "ascii.js",
+        "range": {
+          "end": {
+            "column": 36,
+            "line": 1
+          },
+          "start": {
+            "column": 34,
+            "line": 1
+          }
+        }
+      },
+      "message": "Using == may be unsafe if you are relying on type coercion.",
+      "severity": "ERROR",
+      "suggestions": [
+        {
+          "range": {
+            "end": {
+              "column": 36,
+              "line": 1
+            },
+            "start": {
+              "column": 36,
+              "line": 1
+            }
+          },
+          "text": "="
+        }
+      ]
+    },
+    {
+      "code": {
+        "url": "https://biomejs.dev/linter/rules/no-double-equals",
+        "value": "lint/suspicious/noDoubleEquals"
+      },
+      "location": {
+        "path": "bom.js",
+        "range": {
+          "end": {
+            "column": 37,
+            "line": 1
+          },
+          "start": {
+            "column": 35,
+            "line": 1
+          }
+        }
+      },
+      "message": "Using == may be unsafe if you are relying on type coercion.",
+      "severity": "ERROR",
+      "suggestions": [
+        {
+          "range": {
+            "end": {
+              "column": 37,
+              "line": 1
+            },
+            "start": {
+              "column": 37,
+              "line": 1
+            }
+          },
+          "text": "="
+        }
+      ]
+    },
+    {
+      "code": {
+        "url": "https://biomejs.dev/linter/rules/no-double-equals",
+        "value": "lint/suspicious/noDoubleEquals"
+      },
+      "location": {
+        "path": "crlf.js",
+        "range": {
+          "end": {
+            "column": 36,
+            "line": 1
+          },
+          "start": {
+            "column": 34,
+            "line": 1
+          }
+        }
+      },
+      "message": "Using == may be unsafe if you are relying on type coercion.",
+      "severity": "ERROR",
+      "suggestions": [
+        {
+          "range": {
+            "end": {
+              "column": 36,
+              "line": 1
+            },
+            "start": {
+              "column": 36,
+              "line": 1
+            }
+          },
+          "text": "="
+        }
+      ]
+    },
+    {
+      "code": {
+        "url": "https://biomejs.dev/linter/rules/no-double-equals",
+        "value": "lint/suspicious/noDoubleEquals"
+      },
+      "location": {
+        "path": "nonascii.js",
+        "range": {
+          "end": {
+            "column": 36,
+            "line": 1
+          },
+          "start": {
+            "column": 34,
+            "line": 1
+          }
+        }
+      },
+      "message": "Using == may be unsafe if you are relying on type coercion.",
+      "severity": "ERROR",
+      "suggestions": [
+        {
+          "range": {
+            "end": {
+              "column": 36,
+              "line": 1
+            },
+            "start": {
+              "column": 36,
+              "line": 1
+            }
+          },
+          "text": "="
+        }
+      ]
+    }
+  ]
+}

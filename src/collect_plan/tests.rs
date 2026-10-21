@@ -30,6 +30,8 @@ const BOXED: Tool = Tool {
     env: &[],
     prepare: None,
     data: None,
+    sarif_fixes: None,
+    refusals: &[],
 };
 
 struct Fixture {
@@ -142,7 +144,7 @@ fn rules_are_mounted_in_a_container_and_named_on_the_host() {
         [
             "opengrep",
             "scan",
-            "--sarif",
+            "--json",
             "--no-rewrite-rule-ids",
             "--config",
             "/rules/0",
@@ -153,7 +155,7 @@ fn rules_are_mounted_in_a_container_and_named_on_the_host() {
     );
     assert_eq!(
         planned[0].stdout,
-        Some(fixture.root.0.join(".sloptopop/reports/opengrep.sarif"))
+        Some(fixture.root.0.join(".sloptopop/reports/.raw/opengrep.json"))
     );
     let path = fake_tools("findings").into_os_string();
     let host = host(CATALOGUE, &fixture.settings(), Some(path.as_os_str()));

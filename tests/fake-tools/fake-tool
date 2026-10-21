@@ -5,8 +5,9 @@
 #
 # The directory a stub sits in selects its behaviour:
 #   findings  --version prints "<tool> 1.0.0"; otherwise writes a minimal
-#             SARIF report (to the file its output flag names, or to
-#             stdout) and exits with the tool's "findings found" code
+#             report (SARIF, or the JSON the tool's fixes travel in: Ruff,
+#             Opengrep, Semgrep, Biome) to the file its output flag names,
+#             or to stdout, and exits with the tool's "findings found" code
 #   broken    --version fails silently; otherwise prints "fake failure"
 #             on stderr and exits 70
 #   killed    answers --version, otherwise dies from a signal
@@ -65,6 +66,12 @@ if [ "$name" = dotnet ]; then
     out=.sloptopop/reports/sonaranalyzer-csharp.Fake.sarif
 fi
 report='{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"'"$name"'"}},"results":[]}]}'
+# The tools whose fixes only their JSON carries print that JSON instead.
+case $name in
+    ruff) report='[]' ;;
+    opengrep|semgrep) report='{"results":[],"errors":[]}' ;;
+    biome) report='{"diagnostics":[]}' ;;
+esac
 if [ -n "$out" ]; then
     printf '%s\n' "$report" > "$out"
 else

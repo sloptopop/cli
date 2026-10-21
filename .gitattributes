@@ -1,0 +1,2 @@
+# The WP-21 probe fixtures are byte-exact (CRLF, a byte order mark): never convert them.
+tests/fixtures/fix-probe/** -text

@@ -26,7 +26,7 @@ use std::collections::BTreeSet;
 
 use Arg::{Fixed, Output, ReportsDir, Rules};
 
-use crate::collect_convert::Converter;
+use crate::collect_convert::{Columns, Converter};
 use crate::collect_detect::Ecosystem;
 
 /// The directory, relative to the repository root, that reports go to.
@@ -192,6 +192,12 @@ pub(crate) struct Tool {
     pub(crate) prepare: Option<Prepare>,
     /// The vulnerability data it needs.
     pub(crate) data: Option<Data>,
+    /// The column unit of the fixes the tool writes in its own SARIF, if
+    /// they are kept (converted to byte regions); `None` drops them.
+    pub(crate) sarif_fixes: Option<Columns>,
+    /// Known refusals: when the tool fails and its first error line holds
+    /// the first text, the second is recorded as the reason.
+    pub(crate) refusals: &'static [(&'static str, &'static str)],
 }
 
 impl Tool {
@@ -266,6 +272,8 @@ const PLAIN: Tool = Tool {
     env: &[],
     prepare: None,
     data: None,
+    sarif_fixes: None,
+    refusals: &[],
 };
 
 const GITLEAKS: Image = Image {
@@ -386,13 +394,14 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         }),
         args: &[
             Fixed("scan"),
-            Fixed("--sarif"),
+            Fixed("--json"),
             Fixed("--no-rewrite-rule-ids"),
             Rules("--config"),
             Fixed("."),
         ],
         output: "opengrep.sarif",
         sink: Sink::Stdout,
+        convert: Some((Converter::SemgrepJson, "opengrep.json")),
         ..PLAIN
     },
     // The same rules through Semgrep CE; only with `--only semgrep`, since
@@ -411,7 +420,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         default: false,
         args: &[
             Fixed("scan"),
-            Fixed("--sarif"),
+            Fixed("--json"),
             Fixed("--metrics"),
             Fixed("off"),
             Fixed("--disable-version-check"),
@@ -421,6 +430,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         ],
         output: "semgrep.sarif",
         sink: Sink::Stdout,
+        convert: Some((Converter::SemgrepJson, "semgrep.json")),
         ..PLAIN
     },
     Tool {
@@ -516,7 +526,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         args: &[
             Fixed("check"),
             Fixed("--output-format"),
-            Fixed("sarif"),
+            Fixed("json"),
             Fixed("--output-file"),
             Output(""),
             Fixed("--no-cache"),
@@ -526,6 +536,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         ],
         output: "ruff.sarif",
         findings: &[1],
+        convert: Some((Converter::RuffJson, "ruff.json")),
         ..PLAIN
     },
     Tool {
@@ -586,43 +597,26 @@ pub(crate) const CATALOGUE: &[Tool] = &[
             digest: "sha256:0b298de6fcb4fab406a7b21390c53ae598eaa106c6e00361f5e6c390e4968c4c",
             bytes: [25_810_227, 24_210_701],
         }),
-        args: &[Fixed("lint"), Fixed("--reporter=sarif"), Fixed(".")],
+        args: &[
+            Fixed("lint"),
+            Fixed("--reporter=rdjson"),
+            Fixed("--max-diagnostics=none"),
+            Fixed("."),
+        ],
         output: "biome.sarif",
         sink: Sink::Stdout,
         findings: &[1],
+        convert: Some((Converter::BiomeRdjson, "biome.rdjson")),
         ..PLAIN
     },
     // eslint-plugin-sonarjs 2.0.4 (LGPL-3.0-only, the last release before
     // SonarSource's source-available licence) with its recommended rules,
     // run by the image's pinned ESLint 9.14.0 with sloptopop's own
-    // configuration (never the project's). Two runs, because ESLint writes
-    // one format per run: SARIF for the engine, and `json-with-metadata`,
-    // which keeps each finding's fix and suggestions.
+    // configuration (never the project's). `json-with-metadata` is the only
+    // ESLint format that keeps each finding's fix and suggestions; collect
+    // converts it to SARIF.
     Tool {
         name: "eslint-sonarjs",
-        command: "eslint",
-        licence: "LGPL-3.0-only",
-        licence_files: SONARJS_LICENCE,
-        scope: Scope::Only(Ecosystem::Node),
-        kind: Kind::Run(ESLINT_SONARJS),
-        args: &[
-            Fixed("--config"),
-            Fixed("/opt/eslint-sonarjs/eslint.config.mjs"),
-            Fixed("--no-inline-config"),
-            Fixed("--no-error-on-unmatched-pattern"),
-            Fixed("--format"),
-            Fixed("/opt/eslint-sonarjs/node_modules/@microsoft/eslint-formatter-sarif/sarif.js"),
-            Fixed("--output-file"),
-            Output(""),
-            Fixed("."),
-        ],
-        host: Host::ImageOnly,
-        output: "eslint-sonarjs.sarif",
-        findings: &[1],
-        ..PLAIN
-    },
-    Tool {
-        name: "eslint-sonarjs-json",
         command: "eslint",
         licence: "LGPL-3.0-only",
         licence_files: SONARJS_LICENCE,
@@ -640,8 +634,9 @@ pub(crate) const CATALOGUE: &[Tool] = &[
             Fixed("."),
         ],
         host: Host::ImageOnly,
-        output: "eslint-sonarjs.json",
+        output: "eslint-sonarjs.sarif",
         findings: &[1],
+        convert: Some((Converter::EslintJson, "eslint-sonarjs.json")),
         ..PLAIN
     },
     // ESLint core and typescript-eslint, with exactly the rules the
@@ -667,7 +662,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
             Fixed("--no-inline-config"),
             Fixed("--no-error-on-unmatched-pattern"),
             Fixed("--format"),
-            Fixed("/opt/eslint-typescript/node_modules/@microsoft/eslint-formatter-sarif/sarif.js"),
+            Fixed("json-with-metadata"),
             Fixed("--output-file"),
             Output(""),
             Fixed("."),
@@ -675,6 +670,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         host: Host::ImageOnly,
         output: "eslint-typescript.sarif",
         findings: &[1],
+        convert: Some((Converter::EslintJson, "eslint-typescript.json")),
         ..PLAIN
     },
     Tool {
@@ -720,6 +716,9 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         sink: Sink::Stdout,
         findings: &[1],
         prepare: Some(Prepare::GoModules),
+        // Its SARIF columns are UTF-8 bytes, whatever SARIF says (its own
+        // FIXME in lintcmd/sarif.go).
+        sarif_fixes: Some(Columns::Utf8Bytes),
         ..PLAIN
     },
     Tool {
@@ -745,6 +744,15 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         output: "golangci.sarif",
         findings: &[1],
         prepare: Some(Prepare::GoModules),
+        // golangci-lint 2 refuses a version-1 configuration file; collect
+        // never runs it without the project's configuration instead, which
+        // would change the rules.
+        refusals: &[(
+            "unsupported version of the configuration",
+            "golangci-lint refused the repository's configuration: it is a version-1 file, \
+             and golangci-lint 2 reads only `version: \"2\"` (convert it with \
+             `golangci-lint migrate`); no report",
+        )],
         ..PLAIN
     },
     Tool {

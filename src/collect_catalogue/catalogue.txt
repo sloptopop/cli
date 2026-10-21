@@ -56,6 +56,8 @@
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "gitleaks-history",
@@ -114,6 +116,8 @@
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "osv-scanner",
@@ -203,6 +207,8 @@
         data: Some(
             Osv,
         ),
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "opengrep",
@@ -229,7 +235,7 @@
                 "scan",
             ),
             Fixed(
-                "--sarif",
+                "--json",
             ),
             Fixed(
                 "--no-rewrite-rule-ids",
@@ -245,10 +251,17 @@
         output: "opengrep.sarif",
         sink: Stdout,
         findings: [],
-        convert: None,
+        convert: Some(
+            (
+                SemgrepJson,
+                "opengrep.json",
+            ),
+        ),
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "semgrep",
@@ -275,7 +288,7 @@
                 "scan",
             ),
             Fixed(
-                "--sarif",
+                "--json",
             ),
             Fixed(
                 "--metrics",
@@ -300,10 +313,17 @@
         output: "semgrep.sarif",
         sink: Stdout,
         findings: [],
-        convert: None,
+        convert: Some(
+            (
+                SemgrepJson,
+                "semgrep.json",
+            ),
+        ),
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "bandit",
@@ -357,6 +377,8 @@
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "gosec",
@@ -409,6 +431,8 @@
             GoModules,
         ),
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "govulncheck",
@@ -475,6 +499,8 @@
         data: Some(
             GoVuln,
         ),
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "ruff",
@@ -506,7 +532,7 @@
                 "--output-format",
             ),
             Fixed(
-                "sarif",
+                "json",
             ),
             Fixed(
                 "--output-file",
@@ -533,10 +559,17 @@
         findings: [
             1,
         ],
-        convert: None,
+        convert: Some(
+            (
+                RuffJson,
+                "ruff.json",
+            ),
+        ),
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "pylint-cyclic-import",
@@ -593,6 +626,8 @@
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "oxlint",
@@ -637,6 +672,8 @@
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "biome",
@@ -666,7 +703,10 @@
                 "lint",
             ),
             Fixed(
-                "--reporter=sarif",
+                "--reporter=rdjson",
+            ),
+            Fixed(
+                "--max-diagnostics=none",
             ),
             Fixed(
                 ".",
@@ -678,75 +718,20 @@
         findings: [
             1,
         ],
-        convert: None,
+        convert: Some(
+            (
+                BiomeRdjson,
+                "biome.rdjson",
+            ),
+        ),
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "eslint-sonarjs",
-        command: "eslint",
-        licence: "LGPL-3.0-only",
-        licence_files: [
-            "https://registry.npmjs.org/eslint-plugin-sonarjs/-/eslint-plugin-sonarjs-2.0.4.tgz#package/LICENSE",
-        ],
-        scope: Only(
-            Node,
-        ),
-        kind: Run(
-            Image {
-                name: "analyzers/eslint-sonarjs",
-                version: "2.0.4-1",
-                digest: "sha256:71327a7bcad1d2d6ba138f461f48c438852fa1b17511bddb166d23b83998ee13",
-                bytes: [
-                    107709256,
-                    108049408,
-                ],
-            },
-        ),
-        default: true,
-        args: [
-            Fixed(
-                "--config",
-            ),
-            Fixed(
-                "/opt/eslint-sonarjs/eslint.config.mjs",
-            ),
-            Fixed(
-                "--no-inline-config",
-            ),
-            Fixed(
-                "--no-error-on-unmatched-pattern",
-            ),
-            Fixed(
-                "--format",
-            ),
-            Fixed(
-                "/opt/eslint-sonarjs/node_modules/@microsoft/eslint-formatter-sarif/sarif.js",
-            ),
-            Fixed(
-                "--output-file",
-            ),
-            Output(
-                "",
-            ),
-            Fixed(
-                ".",
-            ),
-        ],
-        host: ImageOnly,
-        output: "eslint-sonarjs.sarif",
-        sink: PathArgument,
-        findings: [
-            1,
-        ],
-        convert: None,
-        env: [],
-        prepare: None,
-        data: None,
-    },
-    Tool {
-        name: "eslint-sonarjs-json",
         command: "eslint",
         licence: "LGPL-3.0-only",
         licence_files: [
@@ -797,15 +782,22 @@
             ),
         ],
         host: ImageOnly,
-        output: "eslint-sonarjs.json",
+        output: "eslint-sonarjs.sarif",
         sink: PathArgument,
         findings: [
             1,
         ],
-        convert: None,
+        convert: Some(
+            (
+                EslintJson,
+                "eslint-sonarjs.json",
+            ),
+        ),
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "eslint-typescript",
@@ -847,7 +839,7 @@
                 "--format",
             ),
             Fixed(
-                "/opt/eslint-typescript/node_modules/@microsoft/eslint-formatter-sarif/sarif.js",
+                "json-with-metadata",
             ),
             Fixed(
                 "--output-file",
@@ -865,10 +857,17 @@
         findings: [
             1,
         ],
-        convert: None,
+        convert: Some(
+            (
+                EslintJson,
+                "eslint-typescript.json",
+            ),
+        ),
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "dependency-cruiser",
@@ -925,6 +924,8 @@
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "staticcheck",
@@ -971,6 +972,10 @@
             GoModules,
         ),
         data: None,
+        sarif_fixes: Some(
+            Utf8Bytes,
+        ),
+        refusals: [],
     },
     Tool {
         name: "golangci-lint",
@@ -1026,6 +1031,13 @@
             GoModules,
         ),
         data: None,
+        sarif_fixes: None,
+        refusals: [
+            (
+                "unsupported version of the configuration",
+                "golangci-lint refused the repository's configuration: it is a version-1 file, and golangci-lint 2 reads only `version: \"2\"` (convert it with `golangci-lint migrate`); no report",
+            ),
+        ],
     },
     Tool {
         name: "swiftlint",
@@ -1076,6 +1088,8 @@
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "sonaranalyzer-csharp",
@@ -1127,6 +1141,8 @@
             DotnetRestore,
         ),
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "scorecard-license",
@@ -1177,6 +1193,8 @@
         ],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "jscpd",
@@ -1250,6 +1268,8 @@
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "phpcs",
@@ -1313,6 +1333,8 @@
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "pmd",
@@ -1381,6 +1403,8 @@
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "detekt",
@@ -1434,6 +1458,8 @@
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "clang-tidy",
@@ -1475,6 +1501,8 @@
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "cargo-llvm-cov",
@@ -1511,6 +1539,8 @@
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "coverage.py",
@@ -1543,6 +1573,8 @@
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "c8",
@@ -1578,6 +1610,8 @@
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "coverlet",
@@ -1613,6 +1647,8 @@
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
     Tool {
         name: "gcovr",
@@ -1642,5 +1678,7 @@
         env: [],
         prepare: None,
         data: None,
+        sarif_fixes: None,
+        refusals: [],
     },
 ]

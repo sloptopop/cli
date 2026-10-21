@@ -110,23 +110,84 @@ fn statuses_expose_name_code_and_reason() {
 fn a_host_tool_writing_its_own_report_runs_in_the_root() {
     let root = root();
     let outcome = run_host(
-        host_plan(named("ruff"), fake_tools("findings").join("ruff"), &root),
+        host_plan(
+            named("bandit"),
+            fake_tools("findings").join("bandit"),
+            &root,
+        ),
         &root.0,
     );
-    assert_eq!(outcome.version.as_deref(), Some("ruff 1.0.0"), "first line");
+    assert_eq!(
+        outcome.version.as_deref(),
+        Some("bandit 1.0.0"),
+        "first line"
+    );
     assert_eq!(outcome.status, Status::Ran(1), "findings are success");
-    assert_eq!(outcome.argv, named("ruff").argv(&[], true), "argv kept");
+    assert_eq!(outcome.argv, named("bandit").argv(&[], true), "argv kept");
     assert_eq!(outcome.image, None);
     assert_eq!(
         calls(&root, ".fake-calls"),
-        "ruff --version\nruff check --output-format sarif --output-file .sloptopop/reports/ruff.sarif --no-cache --extend-select S110,S501,N999 .\n",
+        "bandit --version\nbandit -r . -f sarif -o .sloptopop/reports/bandit.sarif\n",
         "argv, run in the root"
+    );
+    assert!(
+        fs::read_to_string(root.0.join(".sloptopop/reports/bandit.sarif"))
+            .unwrap()
+            .contains("\"name\": \"bandit\""),
+        "normalized"
+    );
+}
+
+#[test]
+fn a_host_tool_whose_fixes_travel_in_json_is_converted() {
+    let root = root();
+    let outcome = run_host(
+        host_plan(named("ruff"), fake_tools("findings").join("ruff"), &root),
+        &root.0,
+    );
+    assert_eq!(outcome.status, Status::Ran(1));
+    assert!(
+        calls(&root, ".fake-calls").contains(
+            "ruff check --output-format json --output-file .sloptopop/reports/.raw/ruff.json "
+        ),
+        "the fix-carrying format"
     );
     assert!(
         fs::read_to_string(root.0.join(".sloptopop/reports/ruff.sarif"))
             .unwrap()
             .contains("\"name\": \"ruff\""),
-        "normalized"
+        "converted to SARIF"
+    );
+}
+
+#[test]
+fn known_refusals_are_recorded_with_their_reason() {
+    let golangci = named("golangci-lint");
+    let refused_config = Status::Failed {
+        code: Some(3),
+        detail: "Error: can't load config: unsupported version of the configuration: \"\""
+            .to_owned(),
+    };
+    let (code, detail) = failed(refused(golangci, refused_config.clone()));
+    assert_eq!(code, Some(3));
+    assert!(
+        detail.starts_with("golangci-lint refused the repository's configuration"),
+        "{detail}"
+    );
+    let other = Status::Failed {
+        code: Some(3),
+        detail: "Error: typecheck".to_owned(),
+    };
+    assert_eq!(refused(golangci, other.clone()), other, "another failure");
+    assert_eq!(
+        refused(named("ruff"), refused_config.clone()),
+        refused_config,
+        "another tool"
+    );
+    assert_eq!(refused(golangci, Status::Ran(1)), Status::Ran(1));
+    assert_eq!(
+        refused(golangci, Status::Skipped("s".to_owned())),
+        Status::Skipped("s".to_owned())
     );
 }
 
@@ -310,7 +371,7 @@ fn conversions_that_fail_are_failures() {
         Status::Missing("m".to_owned())
     );
     assert_eq!(
-        finish(&root.0, named("ruff"), "v", Status::Ran(1)),
+        finish(&root.0, named("bandit"), "v", Status::Ran(1)),
         Status::Ran(1),
         "SARIF already"
     );

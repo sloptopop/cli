@@ -126,20 +126,19 @@ the source and in the `--dry-run` plan.
 | `gitleaks` | gitleaks 8.30.1 | MIT | all | `gitleaks dir . --redact --report-format sarif --report-path <out> --exit-code 0` | `gitleaks.sarif` | |
 | `gitleaks-history` | gitleaks 8.30.1 | MIT | all git repositories | `gitleaks git . --redact --report-format sarif --report-path <out> --exit-code 0` | `gitleaks.history.sarif` | |
 | `osv-scanner` | osv-scanner 2.7.0 | Apache-2.0 | all | `osv-scanner scan source -r --offline --format sarif .` (stdout) | `osv-scanner.sarif` | 1, 128 |
-| `opengrep` | opengrep 1.31.0 | LGPL-2.1-only | all | `opengrep scan --sarif --no-rewrite-rule-ids --config /rules/0 [--config /rules/1] .` (stdout) | `opengrep.sarif` | |
-| `semgrep` (only with `--only`) | semgrep 1.181.0 | LGPL-2.1-only | all | `semgrep scan --sarif --metrics off --disable-version-check --no-rewrite-rule-ids --config /rules/0 [--config /rules/1] .` (stdout) | `semgrep.sarif` | |
+| `opengrep` | opengrep 1.31.0 | LGPL-2.1-only | all | `opengrep scan --json --no-rewrite-rule-ids --config /rules/0 [--config /rules/1] .` (stdout, converted) | `opengrep.sarif` | |
+| `semgrep` (only with `--only`) | semgrep 1.181.0 | LGPL-2.1-only | all | `semgrep scan --json --metrics off --disable-version-check --no-rewrite-rule-ids --config /rules/0 [--config /rules/1] .` (stdout, converted) | `semgrep.sarif` | |
 | `bandit` | bandit 1.9.4 | Apache-2.0 | python | `bandit -r . -f sarif -o <out>` | `bandit.sarif` | 1 |
-| `ruff` | ruff 0.17.1 | MIT | python | `ruff check --output-format sarif --output-file <out> --no-cache --extend-select S110,S501,N999 .` | `ruff.sarif` | 1 |
+| `ruff` | ruff 0.17.1 | MIT | python | `ruff check --output-format json --output-file <out> --no-cache --extend-select S110,S501,N999 .` (converted) | `ruff.sarif` | 1 |
 | `pylint-cyclic-import` | pylint 4.1.3 | GPL-2.0-or-later | python | `pylint --disable=all --enable=cyclic-import --output-format=json2 --recursive=y --exit-zero .` (stdout, converted) | `pylint-cyclic-import.sarif` | |
 | `gosec` | gosec 2.29.0 | Apache-2.0 | go | `gosec -fmt sarif -out <out> ./...` | `gosec.sarif` | 1 |
 | `govulncheck` | govulncheck 1.1.4 | BSD-3-Clause | go | `govulncheck -db file:///db/govulndb -format sarif ./...` (stdout) | `govulncheck.sarif` | 3 |
 | `staticcheck` | staticcheck 2026.2.2 | MIT | go | `staticcheck -f sarif ./...` (stdout) | `staticcheck.sarif` | 1 |
-| `golangci-lint` | golangci-lint 2.14.0 | GPL-3.0-only | go | `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0 --uniq-by-line=false --output.sarif.path=<out> ./...` | `golangci.sarif` | 1 |
+| `golangci-lint` | golangci-lint 2.14.0 | GPL-3.0-only | go | `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0 --uniq-by-line=false --output.sarif.path=<out> ./...` (a version-1 configuration file is refused: see [below](#when-a-tool-refuses-your-configuration)) | `golangci.sarif` | 1 |
 | `oxlint` | oxlint 1.88.0 | MIT | node | `oxlint --format sarif .` (stdout) | `oxlint.sarif` | 1 |
-| `biome` | biome 2.5.15 | MIT OR Apache-2.0 | node | `biome lint --reporter=sarif .` (stdout) | `biome.sarif` | 1 |
-| `eslint-sonarjs` | eslint-sonarjs 2.0.4 | LGPL-3.0-only | node | `eslint --config /opt/eslint-sonarjs/eslint.config.mjs --no-inline-config --no-error-on-unmatched-pattern --format /opt/eslint-sonarjs/node_modules/@microsoft/eslint-formatter-sarif/sarif.js --output-file <out> .` | `eslint-sonarjs.sarif` | 1 |
-| `eslint-sonarjs-json` | eslint-sonarjs 2.0.4 | LGPL-3.0-only | node | the same with `--format json-with-metadata` | `eslint-sonarjs.json` | 1 |
-| `eslint-typescript` | eslint-typescript 8.71.2 | MIT | node | `eslint --config /opt/eslint-typescript/eslint.config.mjs --no-inline-config --no-error-on-unmatched-pattern --format …/sarif.js --output-file <out> .` | `eslint-typescript.sarif` | 1 |
+| `biome` | biome 2.5.15 | MIT OR Apache-2.0 | node | `biome lint --reporter=rdjson --max-diagnostics=none .` (stdout, converted) | `biome.sarif` | 1 |
+| `eslint-sonarjs` | eslint-sonarjs 2.0.4 | LGPL-3.0-only | node | `eslint --config /opt/eslint-sonarjs/eslint.config.mjs --no-inline-config --no-error-on-unmatched-pattern --format json-with-metadata --output-file <out> .` (converted) | `eslint-sonarjs.sarif` | 1 |
+| `eslint-typescript` | eslint-typescript 8.71.2 | MIT | node | `eslint --config /opt/eslint-typescript/eslint.config.mjs --no-inline-config --no-error-on-unmatched-pattern --format json-with-metadata --output-file <out> .` (converted) | `eslint-typescript.sarif` | 1 |
 | `dependency-cruiser` | dependency-cruiser 18.6.0 | MIT | node | `depcruise --no-progress --config /opt/dependency-cruiser/depcruise.cjs --output-type json .` (stdout, converted) | `dependency-cruiser.sarif` | |
 | `swiftlint` | swiftlint 0.65.1 | MIT | swift | `swiftlint lint --quiet --no-cache --reporter sarif` (stdout) | `swiftlint.sarif` | 2 |
 | `sonaranalyzer-csharp` | sonaranalyzer-csharp 9.32.0.97167 | LGPL-3.0-only | dotnet | `dotnet build --no-restore --no-incremental -p:TreatWarningsAsErrors=false -p:DirectoryBuildPropsPath=/opt/sonaranalyzer-csharp/Directory.Build.props` | `sonaranalyzer-csharp.<project>[.<framework>].sarif` | |
@@ -335,12 +334,17 @@ vulnerability database that is months old would miss what matters.
 
 ## Conversions
 
-Five tools write no SARIF. They write their own format to
-`.sloptopop/reports/.raw/` (hidden, never read by the engine), and
-`collect` converts it, keeping each tool's own rule id and message:
+Five tools write no SARIF, and five more keep their fixes only in another
+format. They write that format to `.sloptopop/reports/.raw/` (hidden, never
+read by the engine), and `collect` converts it, keeping each tool's own
+rule id and message, and its fixes (see [Fixes](#fixes)):
 
 | Tool | Format | Results |
 |---|---|---|
+| `ruff` | Ruff JSON | every diagnostic, with its fix and Ruff's applicability (`safe`, `unsafe`, `displayonly`), which Ruff's SARIF leaves out |
+| `eslint-sonarjs`, `eslint-typescript` | ESLint `json-with-metadata` | every message with a rule (ESLint's own errors are not findings; 2 as error, 1 as warning), with its autofix and its suggestion |
+| `biome` | Biome rdjson | every diagnostic, with its code suggestion (`ERROR` as error, `WARNING` as warning, others as note) |
+| `opengrep`, `semgrep` | Opengrep and Semgrep JSON | every result, with its rule's fix (`ERROR`, `CRITICAL`, `HIGH` as error; `WARNING`, `MEDIUM` as warning; others as note) |
 | `scorecard-license` | Scorecard JSON | one result, about the repository, when the License check finds no licence file (score 0) |
 | `phpcs` | PHP_CodeSniffer JSON | every message, `ERROR` as error, others as warning |
 | `pylint-cyclic-import` | Pylint `json2` | every message; fatal and error as error, warning, refactor and convention as warning |
@@ -348,6 +352,116 @@ Five tools write no SARIF. They write their own format to
 | `clang-tidy` | clang-tidy diagnostics | every diagnostic of the requested check (compiler diagnostics are not findings) |
 
 Output that cannot be read is a `failed` tool, never an empty report.
+
+## Fixes
+
+Most analyzers know how to fix some of what they report. `collect` keeps
+each such fix with its finding, exactly as the tool gave it, so the
+server can later turn the safe ones into verified changes (WP-21,
+`APPLY_ANALYZER_FIX`). `collect` never applies a fix, never runs a tool's
+own fix mode (`--fix`, `--write`), and never changes a fix: not its extent,
+its order, its text or its alternatives. It only translates where the
+fix is.
+
+**The carrier.** A kept fix is a SARIF `fixes` entry (SARIF 2.1.0 §3.55–§3.57)
+whose regions are **byte offsets only** (`byteOffset`, `byteLength`, §3.30.3)
+into the file as committed, byte order mark included:
+
+```json
+"fixes": [{
+  "description": { "text": "Convert to `X | None`" },
+  "artifactChanges": [{ "artifactLocation": { "uri": "app/models.py" },
+    "replacements": [{ "deletedRegion": { "byteOffset": 1180, "byteLength": 14 },
+                       "insertedContent": { "text": "str | None" } }] }],
+  "properties": { "sloptopop/applicability": "safe", "sloptopop/toolApplicability": "safe",
+                  "sloptopop/source": "ruff-json", "sloptopop/converter": 1,
+                  "sloptopop/reviewed": true }
+}]
+```
+
+The run lists every file a kept fix names in `artifacts`, with its length
+and the BLAKE3 digest of the bytes the tool read (`hashes.blake3`), and
+every fix that was not kept in `properties["sloptopop/droppedFixes"]`
+(`{rule, path, reason}`). A finding always stays; only its fix is dropped.
+
+**Applicability**, normalised from the tool's own word:
+
+| `sloptopop/applicability` | Means | From |
+|---|---|---|
+| `safe` | the tool applies it in its default fix mode, with no opt-in | Ruff `safe`; ESLint's autofix (`fix`); Biome's safe fix |
+| `unsafe` | the tool applies it only with an opt-in | Ruff `unsafe`; Biome's unsafe fix |
+| `suggestion` | the tool never applies it by itself | Ruff `displayonly`; ESLint `suggestions`; Opengrep and Semgrep rule fixes; fixes written in a tool's own SARIF (staticcheck) |
+
+**Where a fix is.** Every tool counts positions its own way; `collect`
+applies each one's rule, as its source at the pinned version and a
+probe with non-ASCII text, CRLF line ends and a byte order mark show:
+
+| Tool | Positions | Rule |
+|---|---|---|
+| Ruff | 1-based rows and columns, columns in code points | the byte order mark is not a column |
+| Biome | 1-based lines and columns, columns in code points | the byte order mark is column 1 of line 1 |
+| ESLint | `range`, UTF-16 code units | into the text without its byte order mark |
+| staticcheck (its SARIF) | 1-based lines and columns, columns in UTF-8 bytes | whatever its SARIF `columnKind` says |
+| Opengrep, Semgrep | byte offsets | into the raw file |
+
+The SARIF fixes other tools write are dropped (`fix.unconverted`): their
+text regions do not say their unit reliably (Ruff's, staticcheck's and
+golangci-lint's SARIF have no `columnKind`, and Opengrep's SARIF fixes put
+whole lines into a region that is part of a line). golangci-lint's own fixes
+travel only in its JSON output, which `collect` does not run yet; they are
+suggestions (go/analysis: "at most one may be applied").
+
+**Dropped, with the reason**: a file that is not UTF-8 (`fix.not-utf8`) or
+has a carriage return without a line feed (`fix.lone-cr`); a position past
+its line or file (`fix.out-of-range`), inside a character or between `\r`
+and `\n` (`fix.boundary`), inside a UTF-16 surrogate pair
+(`fix.surrogate`); an edit touching the byte order mark (`fix.bom`); a fix
+in a notebook cell (`fix.notebook`); edits out of order, overlapping, or
+two insertions at one point (`fix.overlap-within`); several fixes of one
+level for one finding (`fix.alternatives`); a fix in several files
+(`fix.multi-file`); a fix without a file or an edit (`fix.placeholder`);
+an ESLint fix for text other than the file's (`fix.stale`); a path that is
+not a regular file below the root (`fix.path`); a level or format the
+converter does not know (`fix.unconverted`); and a safe fix whose
+safety the project's configuration can change (`fix.config`, see below).
+
+**Reviewed.** `sloptopop/reviewed` is `true` only when the reviewed fix
+table (`src/collect_convert/reviewed-fixes.tsv`) lists the tool, its
+upstream version, the rule and the level, with the row switched `on`. The
+level the tool reports must equal the table's: a promoted fix, a lying
+report or a newer tool version makes the fix unreviewed (it is still
+carried, never planned). The table holds the 35 safe-level rules the
+pinned tools fixed on sloptopop's public corpus. Three are owner defaults
+and **switchable** (set their state to `off` to exclude them):
+Biome `useImportType` (can break decorator metadata and imports kept for
+their side effects), Biome `noTsIgnore` (`@ts-expect-error` fails, TS2578,
+where nothing is suppressed) and Ruff `I001` (moves comments with the
+import block).
+
+**Your configuration.** Ruff's `extend-safe-fixes` can make an unsafe fix
+report as safe, and a Biome rule's `fix` option can set its kind. When a
+`*.toml` file below the root mentions `extend-safe-fixes` (Ruff), or a
+`biome.json`/`biome.jsonc` mentions `"fix"` (Biome), that tool's safe fixes
+in the repository are dropped (`fix.config`); unsafe and suggestion fixes
+stay. Biome's own fix kinds come from `biome explain` at the pinned
+version (`src/collect_convert/biome-fix-kinds.tsv`); with any other Biome
+version its fixes are dropped.
+
+What the server does with the kept fixes (re-running the same tools,
+checking digests, planning only reviewed safe fixes, never on `info`
+findings unless the owner switches that on, verifying each step) is
+described in [safety.md](safety.md#analyzer-fixes).
+
+## When a tool refuses your configuration
+
+golangci-lint 2 refuses a version-1 `.golangci.yml` (no `version: "2"`).
+`collect` records it as `failed` with the reason
+`golangci-lint refused the repository's configuration: it is a version-1
+file, and golangci-lint 2 reads only version: "2" (convert it with
+golangci-lint migrate); no report`, and writes no report. It never runs
+golangci-lint without your configuration instead: that would change the
+rules your project chose. Run `golangci-lint migrate` in your repository
+(golangci-lint's own command) to convert the file.
 
 ## Determinism
 
@@ -362,7 +476,9 @@ and so on the server, which may re-run the same images:
   sorted by id (with the results' indexes following), the rules' help
   texts are dropped (some tools print their tables in a random order; the
   engine reads only the short descriptions), and so are the C# compiler's
-  analyzer timings;
+  analyzer timings; fixes are kept only in the byte-region carrier (see
+  [Fixes](#fixes)), and the files and dropped fixes are listed in sorted
+  order;
 - `jscpd` runs with one worker, and Pylint walks the tree in sorted order;
 - `.collect.json` has no timestamps and no durations.
 
@@ -383,7 +499,7 @@ never chosen automatically:
 - `.collect.json` records `"mode": "host-unpinned"` and each tool's own
   `--version` line;
 - the entries that exist only as images (`eslint-sonarjs`,
-  `eslint-sonarjs-json`, `eslint-typescript`, `dependency-cruiser`,
+  `eslint-typescript`, `dependency-cruiser`,
   `sonaranalyzer-csharp`, `jscpd`, `detekt`, `clang-tidy`) are `missing`;
 - OSV-Scanner downloads its own database (`--offline-vulnerabilities
   --download-offline-databases`) and govulncheck asks vuln.go.dev;
@@ -457,7 +573,7 @@ without them.
 | `golangci-lint` | GPL-3.0-only | [golangci-lint v2.14.0 LICENSE](https://github.com/golangci/golangci-lint/blob/v2.14.0/LICENSE) |
 | `oxlint` | MIT | [oxlint v1.88.0 LICENSE](https://github.com/oxc-project/oxc/blob/oxlint_v1.88.0/LICENSE) |
 | `biome` | MIT OR Apache-2.0 | [LICENSE-MIT](https://github.com/biomejs/biome/blob/@biomejs/biome@2.5.15/LICENSE-MIT) and [LICENSE-APACHE](https://github.com/biomejs/biome/blob/@biomejs/biome@2.5.15/LICENSE-APACHE) at Biome 2.5.15 |
-| `eslint-sonarjs`, `eslint-sonarjs-json` | LGPL-3.0-only | `package/LICENSE` in [eslint-plugin-sonarjs-2.0.4.tgz](https://registry.npmjs.org/eslint-plugin-sonarjs/-/eslint-plugin-sonarjs-2.0.4.tgz) |
+| `eslint-sonarjs` | LGPL-3.0-only | `package/LICENSE` in [eslint-plugin-sonarjs-2.0.4.tgz](https://registry.npmjs.org/eslint-plugin-sonarjs/-/eslint-plugin-sonarjs-2.0.4.tgz) |
 | `eslint-typescript` | MIT | [ESLint v9.39.5 LICENSE](https://github.com/eslint/eslint/blob/v9.39.5/LICENSE) and [typescript-eslint v8.71.2 LICENSE](https://github.com/typescript-eslint/typescript-eslint/blob/v8.71.2/LICENSE) |
 | `dependency-cruiser` | MIT | [dependency-cruiser v18.6.0 LICENSE](https://github.com/sverweij/dependency-cruiser/blob/v18.6.0/LICENSE) |
 | `swiftlint` | MIT | [SwiftLint 0.65.1 LICENSE](https://github.com/realm/SwiftLint/blob/0.65.1/LICENSE) |

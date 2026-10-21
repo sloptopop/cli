@@ -1,0 +1,44 @@
+# The reviewed fix table (WP-21): an analyzer fix is marked reviewed only when
+# its tool, the tool's upstream version, its rule and its level match a row
+# here whose state is `on`. The level the tool reports must equal the row's
+# level: a project config that promotes a fix, a lying report or a version
+# bump makes the fix unreviewed (it is still carried, never planned).
+# Seeded 2026-10-21 from the safe fixes the pinned tools reported on the
+# 21-repo public corpus. Owner defaults, switchable (set the state to `off`):
+# useImportType, noTsIgnore and I001 are `on` (decision O-1, recommended).
+# Columns: tool (catalogue name), version, rule, level, state (on | off), note.
+ruff	0.17.1	UP045	safe	on	corpus
+ruff	0.17.1	UP006	safe	on	corpus
+ruff	0.17.1	UP017	safe	on	corpus
+ruff	0.17.1	UP032	safe	on	corpus
+ruff	0.17.1	F541	safe	on	corpus
+ruff	0.17.1	UP035	safe	on	corpus
+ruff	0.17.1	RUF100	safe	on	corpus
+ruff	0.17.1	UP007	safe	on	corpus
+ruff	0.17.1	UP034	safe	on	corpus
+ruff	0.17.1	FURB167	safe	on	corpus
+ruff	0.17.1	PIE790	safe	on	corpus
+ruff	0.17.1	UP008	safe	on	corpus
+ruff	0.17.1	UP004	safe	on	corpus
+ruff	0.17.1	UP010	safe	on	corpus
+ruff	0.17.1	I001	safe	on	owner default O-1, switchable: moves comments with the import block
+eslint-sonarjs	2.0.4	sonarjs/jsx-no-useless-fragment	safe	on	corpus
+eslint-sonarjs	2.0.4	sonarjs/no-var	safe	on	corpus
+eslint-sonarjs	2.0.4	sonarjs/no-lonely-if	safe	on	corpus
+eslint-sonarjs	2.0.4	sonarjs/prefer-object-spread	safe	on	corpus
+biome	2.5.15	lint/style/useConst	safe	on	corpus
+biome	2.5.15	lint/suspicious/noEmptyInterface	safe	on	corpus
+biome	2.5.15	lint/complexity/useArrowFunction	safe	on	corpus
+biome	2.5.15	lint/correctness/noSwitchDeclarations	safe	on	corpus
+biome	2.5.15	lint/complexity/noUselessEscapeInRegex	safe	on	corpus
+biome	2.5.15	lint/suspicious/noUselessEscapeInString	safe	on	corpus
+biome	2.5.15	lint/suspicious/noPrototypeBuiltins	safe	on	corpus
+biome	2.5.15	lint/complexity/noUselessUndefinedInitialization	safe	on	corpus
+biome	2.5.15	lint/complexity/noUselessThisAlias	safe	on	corpus
+biome	2.5.15	lint/complexity/noBannedTypes	safe	on	corpus
+biome	2.5.15	lint/complexity/noUselessContinue	safe	on	corpus
+biome	2.5.15	lint/complexity/noExtraBooleanCast	safe	on	corpus
+biome	2.5.15	lint/style/useExponentiationOperator	safe	on	corpus
+biome	2.5.15	lint/style/useExportType	safe	on	corpus
+biome	2.5.15	lint/style/useImportType	safe	on	owner default O-1, switchable: can break decorator metadata and imports kept for side effects
+biome	2.5.15	lint/suspicious/noTsIgnore	safe	on	owner default O-1, switchable: @ts-expect-error fails (TS2578) where nothing is suppressed

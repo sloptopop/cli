@@ -176,3 +176,39 @@ D-0172 to D-0181):
 
 This page will be updated when these are decided. The `sloptopop` CLI is
 open source (MIT OR Apache-2.0), so you can read its code.
+
+## Analyzer fixes
+
+Analyzers such as Ruff, ESLint and Biome know how to fix some of what they
+report. sloptopop treats their fixes as claims, not proofs:
+
+- **Kept, never changed, never applied locally.** `collect` keeps each fix
+  exactly as the tool gave it, translated into byte offsets of the file
+  as committed ([collect.md](collect.md#fixes)). It never runs a tool's fix
+  mode and never edits your files.
+- **Only the tool's own safe level.** A fix the tool itself applies only
+  with an opt-in (`unsafe`), or never applies (`suggestion`), is never
+  turned into a change. A safe fix whose safety your configuration can
+  change (Ruff `extend-safe-fixes`, a Biome rule's `fix` option) is
+  dropped.
+- **Only reviewed rules.** A fix becomes a change only for a tool, version
+  and rule in the reviewed fix table, at the level the table records. The
+  owner defaults `useImportType`, `noTsIgnore` (Biome) and `I001` (Ruff)
+  are in the table and can be switched off.
+- **Not on `info` findings** (decision D-0182), unless the owner switches
+  that on.
+- **oxlint's fixes are not used**: none of its report formats carries
+  them; diff-only engines are a later package (WP-22).
+- **Verified on the server** (planned, WP-21 phase 2; until it is built
+  no analyzer fix is applied at all). The server re-runs the same pinned tool on
+  your snapshot, checks the digests of the bytes each fix replaces, and
+  verifies each step: nothing else in the file changes, no token outside
+  the edit changes its kind, the targeted finding is gone, the tool reports
+  no new parse error and no new finding outside the edit. Your project's
+  own type check and tests run on your machine, as evidence. A fix that
+  fails any check is refused, never applied.
+- **What is not proven.** A safe fix can still change behaviour your tests
+  do not cover; the change is labelled as the tool's, not as equivalent.
+- **Licences.** A fix is the tool's output about your code; whether fixes
+  from copyleft rules (eslint-plugin-sonarjs is LGPL-3.0-only) need a notice
+  is an open question for the owner.

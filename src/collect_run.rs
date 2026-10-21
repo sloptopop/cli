@@ -342,12 +342,31 @@ fn matching(reports: &Path, prefix: &str, suffix: &str) -> io::Result<Vec<PathBu
 /// to the SARIF report where the tool writes another format; after a
 /// failure, no report at all (what a failed run wrote is not evidence).
 fn settle(root: &Path, tool: &Tool, version: &str, status: Status) -> Status {
-    let status = finish(root, tool, version, status);
+    let status = refused(tool, finish(root, tool, version, status));
     if !matches!(status, Status::Ran(_)) {
         // Best effort: the failure is what gets recorded either way.
         let _removed = remove_reports(root, tool);
     }
     status
+}
+
+/// A failure the catalogue knows (a tool refusing the project's own
+/// configuration, say) recorded with the catalogue's reason instead of the
+/// tool's first error line.
+fn refused(tool: &Tool, status: Status) -> Status {
+    match status {
+        Status::Failed { code, detail } => {
+            let known = tool
+                .refusals
+                .iter()
+                .find(|(needle, _)| detail.contains(needle));
+            Status::Failed {
+                code,
+                detail: known.map_or(detail, |(_, reason)| (*reason).to_owned()),
+            }
+        }
+        other @ (Status::Ran(_) | Status::Missing(_) | Status::Skipped(_)) => other,
+    }
 }
 
 /// After a successful run, converts the raw output to the SARIF report
@@ -365,7 +384,7 @@ fn finish(root: &Path, tool: &Tool, version: &str, status: Status) -> Status {
     let mut done = Ok(());
     if let Some((format, _)) = tool.convert {
         done = read(&root.join(tool.written_path()), &tool.written_path())
-            .and_then(|bytes| convert(format, &bytes, tool.name, version))
+            .and_then(|bytes| convert(format, &bytes, tool.name, version, root))
             .and_then(|sarif| write(&root.join(tool.output_path()), &tool.output_path(), sarif));
     }
     let reports = done.and_then(|()| {
@@ -379,7 +398,7 @@ fn finish(root: &Path, tool: &Tool, version: &str, status: Status) -> Status {
                 .display()
                 .to_string();
             read(path, &name)
-                .and_then(|bytes| normalize(&bytes, tool.name, version))
+                .and_then(|bytes| normalize(&bytes, tool.name, version, tool.sarif_fixes, root))
                 .and_then(|sarif| write(path, &name, sarif))
         })
     });

@@ -1,16 +1,27 @@
 //! Converting the output of analyzers that write no SARIF (`OpenSSF`
-//! Scorecard, `PHP_CodeSniffer`, Pylint, dependency-cruiser, clang-tidy) into
-//! SARIF 2.1.0, which is all the engine reads. The conversion keeps each
-//! tool's own rule id and message, maps its severity to a SARIF level,
-//! makes paths relative to the repository root, and is deterministic:
-//! results sorted, duplicates dropped, nothing time- or machine-dependent.
+//! Scorecard, `PHP_CodeSniffer`, Pylint, dependency-cruiser, clang-tidy), or
+//! whose fixes only another format carries (Ruff, `ESLint`, Biome, Opengrep
+//! and Semgrep), into SARIF 2.1.0, which is all the engine reads. The
+//! conversion keeps each tool's own rule id and message, maps its severity
+//! to a SARIF level, makes paths relative to the repository root, keeps the
+//! tool's own fixes in the byte-region carrier ([`fix`]), and is
+//! deterministic: results sorted, duplicates dropped, nothing time- or
+//! machine-dependent.
 //!
 //! Standards: SCF TDA-12 (Input Data Validation: unreadable output is an
 //! error, never an empty report), MON-09 (deterministic records).
 
+mod fix;
+mod native;
+mod reviewed;
+
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 
 use serde_json::{Map, Value, json};
+
+pub(crate) use fix::Columns;
+use fix::{Drop, Edit, Files, Fix, Level, is_carrier, one_per_level};
 
 /// Where the repository is mounted in the container (absolute paths below
 /// it become relative).
@@ -30,6 +41,15 @@ pub(crate) enum Converter {
     Depcruise,
     /// clang-tidy's diagnostics (`file:line:col: level: message [check]`).
     ClangTidy,
+    /// Ruff's JSON (`--output-format json`): findings with their fixes.
+    RuffJson,
+    /// `ESLint`'s `json-with-metadata`: messages with their autofix and
+    /// suggestions.
+    EslintJson,
+    /// Biome's rdjson: diagnostics with their code suggestions.
+    BiomeRdjson,
+    /// Opengrep's or Semgrep's JSON: results with their rule's fix.
+    SemgrepJson,
 }
 
 /// One SARIF result, ordered for a deterministic report.
@@ -41,6 +61,7 @@ struct Finding {
     rule: String,
     level: &'static str,
     message: String,
+    fixes: Vec<Fix>,
 }
 
 /// `path` relative to the repository root, with `/` separators.
@@ -49,28 +70,41 @@ fn relative(path: &str) -> String {
     path.strip_prefix("./").unwrap_or(path).to_owned()
 }
 
-/// Converts `raw`, the output of `tool` at `version`, to a SARIF document.
+/// Converts `raw`, the output of `tool` at `version` on the repository at
+/// `root`, to a SARIF document.
 pub(crate) fn convert(
     converter: Converter,
     raw: &[u8],
     tool: &str,
     version: &str,
+    root: &Path,
 ) -> Result<String, String> {
     let json = || -> Result<Value, String> {
         serde_json::from_slice(raw).map_err(|e| format!("{tool} printed no readable JSON: {e}"))
     };
+    let context = native::Context {
+        tool,
+        version,
+        root,
+    };
+    let mut store = Files::new(root);
     let findings = match converter {
         Converter::ClangTidy => clang_tidy(&String::from_utf8_lossy(raw)),
         Converter::Scorecard => scorecard(&json()?)?,
         Converter::Phpcs => phpcs(&json()?)?,
         Converter::Pylint => pylint(&json()?)?,
         Converter::Depcruise => depcruise(&json()?)?,
+        Converter::RuffJson => native::ruff(&json()?, &context, &mut store)?,
+        Converter::EslintJson => native::eslint(&json()?, &context, &mut store)?,
+        Converter::BiomeRdjson => native::biome(&json()?, &context, &mut store)?,
+        Converter::SemgrepJson => native::semgrep(&json()?, &context, &mut store)?,
     };
-    Ok(sarif(tool, version, &findings))
+    Ok(sarif(tool, version, &findings, &store))
 }
 
-/// The SARIF 2.1.0 document holding `findings` (sorted, unique).
-fn sarif(tool: &str, version: &str, findings: &BTreeSet<Finding>) -> String {
+/// The SARIF 2.1.0 document holding `findings` (sorted, unique), with the
+/// files their fixes name and the fixes `store` dropped.
+fn sarif(tool: &str, version: &str, findings: &BTreeSet<Finding>, store: &Files<'_>) -> String {
     let rules: BTreeSet<&str> = findings.iter().map(|f| f.rule.as_str()).collect();
     let results: Vec<Value> = findings
         .iter()
@@ -95,20 +129,27 @@ fn sarif(tool: &str, version: &str, findings: &BTreeSet<Finding>) -> String {
                     }]),
                 );
             }
+            if !f.fixes.is_empty() {
+                result.insert("fixes".to_owned(), f.fixes.iter().map(Fix::sarif).collect());
+            }
             Value::Object(result)
         })
         .collect();
+    let mut run = Map::new();
+    run.insert(
+        "tool".to_owned(),
+        json!({ "driver": {
+            "name": tool,
+            "version": version,
+            "rules": rules.iter().map(|id| json!({ "id": id })).collect::<Vec<_>>(),
+        }}),
+    );
+    run.insert("results".to_owned(), Value::Array(results));
+    store.record(&mut run);
     let document = json!({
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": "2.1.0",
-        "runs": [{
-            "tool": { "driver": {
-                "name": tool,
-                "version": version,
-                "rules": rules.iter().map(|id| json!({ "id": id })).collect::<Vec<_>>(),
-            }},
-            "results": results,
-        }],
+        "runs": [Value::Object(run)],
     });
     format!("{document:#}\n")
 }
@@ -123,11 +164,22 @@ fn sarif(tool: &str, version: &str, findings: &BTreeSet<Finding>) -> String {
 ///   their tables in a random order, and the engine reads only the short
 ///   description.
 ///
+/// - a result's fixes are kept only in the byte-region carrier: sloptopop's
+///   own carriers stay; a fix the tool wrote is converted when the tool's
+///   column unit is known (`native`), and dropped otherwise (a SARIF
+///   producer's `fixes` use text regions whose unit it often misstates).
+///
 /// Everything else is kept. No output at all (OSV-Scanner finding no
 /// packages) is a log without results.
-pub(crate) fn normalize(raw: &[u8], tool: &str, version: &str) -> Result<String, String> {
+pub(crate) fn normalize(
+    raw: &[u8],
+    tool: &str,
+    version: &str,
+    native: Option<Columns>,
+    root: &Path,
+) -> Result<String, String> {
     if raw.iter().all(u8::is_ascii_whitespace) {
-        return Ok(sarif(tool, version, &BTreeSet::new()));
+        return Ok(sarif(tool, version, &BTreeSet::new(), &Files::new(root)));
     }
     let mut document: Value =
         serde_json::from_slice(raw).map_err(|e| format!("{tool} wrote no readable SARIF: {e}"))?;
@@ -175,8 +227,115 @@ pub(crate) fn normalize(raw: &[u8], tool: &str, version: &str) -> Result<String,
         }
         let bases = drop_root_bases(run);
         relativize(run, &bases);
+        carry_native(run, native, &mut Files::new(root));
     }
     Ok(format!("{document:#}\n"))
+}
+
+/// Puts every tool-written fix of `run`'s results into the carrier (or
+/// drops it), and records the files and drops in `run`.
+fn carry_native(run: &mut Value, native: Option<Columns>, store: &mut Files<'_>) {
+    for result in run
+        .get_mut("results")
+        .and_then(Value::as_array_mut)
+        .into_iter()
+        .flatten()
+    {
+        let Some(result) = result.as_object_mut() else {
+            continue;
+        };
+        let written = match result.get("fixes").and_then(Value::as_array) {
+            Some(listed) if !listed.iter().all(is_carrier) => listed.clone(),
+            Some(_) | None => continue,
+        };
+        result.remove("fixes");
+        let rule = result
+            .get("ruleId")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
+        let carried: Vec<Fix> = written
+            .iter()
+            .filter_map(|fix| native_fix(fix, &rule, native, store))
+            .collect();
+        let kept = one_per_level(store, &rule, carried);
+        if !kept.is_empty() {
+            result.insert("fixes".to_owned(), kept.iter().map(Fix::sarif).collect());
+        }
+    }
+    if let Value::Object(run) = run {
+        store.record(run);
+    }
+}
+
+/// A fix a SARIF producer wrote (text regions), in the carrier, if its
+/// column unit is known and it converts.
+fn native_fix(
+    fix: &Value,
+    rule: &str,
+    native: Option<Columns>,
+    store: &mut Files<'_>,
+) -> Option<Fix> {
+    let changes = fix.get("artifactChanges").map_or(&[][..], items);
+    let path = changes
+        .first()
+        .and_then(|change| change.pointer("/artifactLocation/uri"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let drop = match (native, changes.len()) {
+        (_, 0) => Some(Drop::Placeholder),
+        (_, 2..) => Some(Drop::MultiFile),
+        (None, _) => Some(Drop::Unconverted),
+        (Some(_), _) if path.is_empty() => Some(Drop::Placeholder),
+        (Some(_), _) => None,
+    };
+    if let Some(drop) = drop {
+        store.drop(rule, path, drop);
+        return None;
+    }
+    let columns = native.unwrap_or(Columns::Utf8Bytes);
+    let replacements = changes
+        .first()
+        .and_then(|change| change.get("replacements"))
+        .map_or(&[][..], items);
+    store.keep(rule, path, |source| {
+        let edits = replacements
+            .iter()
+            .map(|replacement| {
+                let region = replacement.get("deletedRegion").unwrap_or(&Value::Null);
+                Ok(Edit {
+                    start: source.line_column(
+                        columns,
+                        number(region, "startLine"),
+                        number(region, "startColumn"),
+                    )?,
+                    end: source.line_column(
+                        columns,
+                        number(region, "endLine"),
+                        number(region, "endColumn"),
+                    )?,
+                    text: replacement
+                        .pointer("/insertedContent/text")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_owned(),
+                })
+            })
+            .collect::<Result<Vec<_>, Drop>>()?;
+        Ok(Fix {
+            level: Level::Suggestion,
+            tool_level: "sarif".to_owned(),
+            description: fix
+                .pointer("/description/text")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            source: "sarif",
+            path: path.to_owned(),
+            edits,
+            reviewed: false,
+        })
+    })
 }
 
 /// `uri` relative to the repository root, if it names the container's
@@ -295,6 +454,11 @@ fn number(value: &Value, key: &str) -> u64 {
     value.get(key).and_then(Value::as_u64).unwrap_or_default()
 }
 
+/// The items of `value` if it is an array, else none.
+fn items(value: &Value) -> &[Value] {
+    value.as_array().map_or(&[][..], Vec::as_slice)
+}
+
 fn array<'v>(value: &'v Value, key: &str, what: &str) -> Result<&'v Vec<Value>, String> {
     value
         .get(key)
@@ -317,6 +481,7 @@ fn scorecard(document: &Value) -> Result<BTreeSet<Finding>, String> {
             rule: "License".to_owned(),
             level: "warning",
             message: text(check, "reason"),
+            fixes: Vec::new(),
         })
         .collect())
 }
@@ -341,6 +506,7 @@ fn phpcs(document: &Value) -> Result<BTreeSet<Finding>, String> {
                     "warning"
                 },
                 message: text(message, "message"),
+                fixes: Vec::new(),
             });
         }
     }
@@ -363,6 +529,7 @@ fn pylint(document: &Value) -> Result<BTreeSet<Finding>, String> {
                 _ => "note",
             },
             message: text(message, "message"),
+            fixes: Vec::new(),
         })
         .collect())
 }
@@ -406,6 +573,7 @@ fn depcruise(document: &Value) -> Result<BTreeSet<Finding>, String> {
                     _ => "note",
                 },
                 message,
+                fixes: Vec::new(),
             }
         })
         .collect())
@@ -437,6 +605,7 @@ fn diagnostic(line: &str) -> Option<Finding> {
         rule: checks.split(',').next().unwrap_or(checks).to_owned(),
         level: message.1,
         message: message.0.to_owned(),
+        fixes: Vec::new(),
     })
 }
 

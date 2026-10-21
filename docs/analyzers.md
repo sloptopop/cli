@@ -88,6 +88,13 @@ eslint-plugin-sonarjs and SonarAnalyzer.CSharp are used at their **last
 releases under LGPL-3.0-only**: every later release is under a
 source-available licence that is not open source. Do not upgrade them.
 
+Most of these tools also know how to fix some of what they report. Their
+fixes are kept with their findings, unchanged, in byte offsets; nothing
+on your machine applies them (see [collect.md](collect.md#fixes)). On
+sloptopop's public corpus the pinned tools offered 893 fixes they consider
+safe: Biome 710, Ruff 168, eslint-plugin-sonarjs 15. oxlint's fixes are not
+kept: none of its report formats carries them.
+
 The Go analyzers and the C# build need your project's dependencies: one
 `go mod download` or `dotnet restore` runs first, with network, into a
 cache volume, and the analysis then runs offline (see

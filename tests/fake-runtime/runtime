@@ -130,6 +130,10 @@ run)
     depcruise) echo '{"summary":{"violations":[]}}'; exit 0 ;;
     sloptopop-clang-tidy) echo "# sloptopop-clang-tidy: no compile database"; exit 0 ;;
     jscpd) echo "$sarif" > .sloptopop/reports/jscpd.sarif; exit 0 ;;
+    opengrep|semgrep) echo '{"results":[],"errors":[]}'; exit 0 ;;
+    biome) echo '{"diagnostics":[]}'; exit 1 ;;
+    ruff) echo '[]' > "$out"; exit 1 ;;
+    eslint) echo '{"results":[],"metadata":{}}' > "$out"; exit 1 ;;
     esac
     if [ -n "$out" ]; then echo "$sarif" > "$out"; else echo "$sarif"; fi
     case $entry in

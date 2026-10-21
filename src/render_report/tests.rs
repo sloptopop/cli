@@ -67,3 +67,27 @@ fn a_passing_report_is_short() {
         "not a report"
     );
 }
+
+#[test]
+fn an_analyzer_fix_is_shown_with_its_tool_rule_and_level() {
+    let document = json!({
+        "findings": [
+            {"rule": "analyzer.finding", "severity": "warning", "path": "a.py", "line": 1, "message": "M",
+             "analyzerFix": {"tool": "ruff", "rule": "UP045", "applicability": "safe",
+                             "edits": [{"start": 1, "end": 2, "text": "x"}]}},
+            {"rule": "analyzer.finding", "severity": "warning", "path": "b.js", "message": "N",
+             "analyzerFix": {"tool": "biome", "rule": "lint/style/useConst", "applicability": "safe",
+                             "edits": [{"start": 1, "end": 2, "text": "x"}, {"start": 3, "end": 3, "text": "y"}]}}
+        ],
+        "passed": false
+    });
+    let text = report(&document);
+    assert!(
+        text.contains("  a.py:1  analyzer.finding\n    M\n    analyzer fix: ruff UP045 (safe, 1 edit); applied only by `sloptopop transform`, after the server verifies it\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("analyzer fix: biome lint/style/useConst (safe, 2 edits);"),
+        "{text}"
+    );
+}
