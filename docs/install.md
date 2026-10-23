@@ -1,58 +1,83 @@
 # Install
 
-> **Skeleton.** The release artifacts are not published yet. The sections
-> marked `TODO(L3)` are filled in by the packaging and release work. Until
-> then, nothing on this page is a download link.
-
 sloptopop comes as two programs:
 
 | Program | What it does | Licence |
 |---|---|---|
 | `sloptopop` | The command-line tool you run: `check`, `fix`, `collect`, `transform`. Also the JSON-RPC server the language libraries talk to. | MIT OR Apache-2.0 (open source, this repository) |
-| `sloptopop-local` | The open-source half on your machine: it prepares the masked snapshot, applies the server's verified changes and runs your checks. `sloptopop` starts it as a separate process for `check`, `fix`, `transform` and `local`. | MIT OR Apache-2.0 (open source) |
+| `sloptopop-local` | The open-source half on your machine: it prepares the masked snapshot, applies the server's verified changes and runs your checks. `sloptopop` starts it as a separate process for `check`, `fix`, `transform` and `local`. | MIT OR Apache-2.0 (open source, [sloptopop/local-engine](https://github.com/sloptopop/local-engine)) |
 
-sloptopop detects on its server, `sloptopop-engine` (hosted, or
-self-hosted from the same image); nothing proprietary is installed on your
-machine. `sloptopop collect` works without `sloptopop-local`. `check`,
-`fix` and `transform` need it and a server.
+sloptopop detects on its server, `sloptopop-engine` (hosted at
+`https://api.sloptopop.dev`, or self-hosted from the same image); nothing
+proprietary is installed on your machine. `sloptopop collect` works
+without `sloptopop-local`. `check`, `fix` and `transform` need it, `curl`
+and a server.
+
+Every release archive holds both programs, built from the commits the
+release names, with their licences and third-party notices.
 
 ## Supported platforms
 
-Planned release targets:
+| System | Architectures | Archive |
+|---|---|---|
+| Linux (any distribution; static musl binaries) | x86_64, arm64 | `sloptopop-x86_64-unknown-linux-musl.tar.gz`, `sloptopop-aarch64-unknown-linux-musl.tar.gz` |
+| macOS 11 or later | Apple silicon (arm64), Intel (x86_64) | `sloptopop-aarch64-apple-darwin.tar.gz`, `sloptopop-x86_64-apple-darwin.tar.gz` |
 
-- macOS on Apple silicon (arm64) and Intel (x86_64);
-- Linux on x86_64 and arm64.
-
-`TODO(L3)`: confirm the list and the minimum OS versions.
+Windows has no release archive yet.
 
 ## Install script
 
-`TODO(L3)`: the command, the URL, and what the script does. It must:
-
-- be POSIX `sh`;
-- verify the checksum of every file it downloads before installing it;
-- install `sloptopop` and `sloptopop-local` into the same directory.
-
 ```sh
-# TODO(L3): install command
+curl -fsSL https://github.com/sloptopop/cli/releases/latest/download/install.sh | sh
 ```
 
-## Homebrew
+The script (POSIX `sh`, [scripts/install.sh](../scripts/install.sh)):
 
-`TODO(L3)`: the tap and the formula name.
+1. picks the archive for your system and architecture;
+2. downloads it and the release's `SHA256SUMS`;
+3. refuses to install unless the archive's SHA-256 matches its line in
+   `SHA256SUMS`;
+4. when `cosign` is on your `PATH`, also verifies the signature of
+   `SHA256SUMS` (see [Verify the download](#verify-the-download));
+5. installs `sloptopop` and `sloptopop-local` into the same directory,
+   `~/.local/bin` by default, and says if that directory is not on your
+   `PATH`.
+
+| Variable | Meaning |
+|---|---|
+| `SLOPTOPOP_VERSION` | Install this release (e.g. `0.1.0`) instead of the latest. |
+| `SLOPTOPOP_INSTALL_DIR` | Install into this directory. |
+| `SLOPTOPOP_DOWNLOAD_URL` | Download from this release directory (`https://` or `file://`), e.g. a mirror. |
+| `SLOPTOPOP_REQUIRE_SIGNATURE=1` | Fail unless `cosign` verifies the signature. |
+
+To read the script before running it:
 
 ```sh
-# TODO(L3): brew tap … && brew install …
+curl -fsSLO https://github.com/sloptopop/cli/releases/latest/download/install.sh
+less install.sh
+sh install.sh
 ```
 
-## `cargo install` (CLI only)
-
-The open-source CLI builds from source with Cargo. This installs only
-`sloptopop`, not `sloptopop-local`.
+## Homebrew (macOS and Linux)
 
 ```sh
-# TODO(L3): cargo install command (package name and version)
+brew install sloptopop/tap/sloptopop
 ```
+
+The formula ([sloptopop/homebrew-tap](https://github.com/sloptopop/homebrew-tap))
+installs both programs from the same release archives and checks their
+SHA-256.
+
+## `cargo install` (CLI only): not available yet
+
+Installing from source with Cargo (`cargo install --git
+https://github.com/sloptopop/cli`, or from crates.io) does not work yet:
+every sloptopop crate's build script runs its quality gate (all tests with
+100% coverage) on every build, and that includes a `cargo install`. A
+change that skips the gate for sources Cargo unpacked itself is waiting on
+a policy decision. Until then, use the install script or Homebrew, or
+build a checkout as a developer does (see [CONTRIBUTING.md](../CONTRIBUTING.md)).
+`cargo install` would install only `sloptopop`, not `sloptopop-local`.
 
 ## Where `sloptopop-local` must be
 
@@ -74,8 +99,29 @@ hint: install sloptopop-local next to the sloptopop executable or on your PATH,
 
 ## Verify the download
 
-`TODO(L3)`: where the checksums, the signatures and the SBOM are published,
-the public signing key, and the exact verification commands.
+Every release publishes, next to the archives:
+
+| File | What it is |
+|---|---|
+| `SHA256SUMS` | The SHA-256 of every archive, `install.sh` and both SBOMs. |
+| `SHA256SUMS.sigstore.json` | A [Sigstore](https://www.sigstore.dev/) bundle: the keyless signature of `SHA256SUMS` by the release workflow of `github.com/sloptopop/cli`, with its certificate and transparency-log entry. There is no long-lived signing key. |
+| `sloptopop.cdx.json`, `sloptopop-local.cdx.json` | The CycloneDX SBOMs of both programs (every crate and its version). |
+
+By hand, for release `v0.1.0`:
+
+```sh
+v=v0.1.0; base=https://github.com/sloptopop/cli/releases/download/$v
+curl -fsSLO "$base/SHA256SUMS" -fsSLO "$base/SHA256SUMS.sigstore.json" \
+     -fsSLO "$base/sloptopop-aarch64-apple-darwin.tar.gz"
+cosign verify-blob --bundle SHA256SUMS.sigstore.json \
+  --certificate-identity "https://github.com/sloptopop/cli/.github/workflows/release.yml@refs/tags/$v" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com SHA256SUMS
+shasum -a 256 --ignore-missing -c SHA256SUMS    # Linux: sha256sum --ignore-missing -c SHA256SUMS
+```
+
+`cosign` is open source (Apache-2.0). The Linux archives are reproducible:
+building the release's commits with `release/build.sh` on any x86_64 or
+arm64 Docker host gives the same bytes as the published archive.
 
 ## Check the installation
 
@@ -110,17 +156,22 @@ mirror or proxy, set `SLOPTOPOP_REGISTRY`. See
 
 ## Updates
 
-The current `sloptopop` and `sloptopop-local` contain no update check;
-`sloptopop` makes one network call, to the sloptopop server, when you run
-`check`, `fix` or `transform`. How updates will be delivered is to be
-confirmed.
+`sloptopop` and `sloptopop-local` contain no update check; `sloptopop`
+makes one network call, to the sloptopop server, when you run `check`,
+`fix` or `transform`. To update:
 
-`TODO(L3)`: how to update with each install path above.
+| Installed with | Update |
+|---|---|
+| the install script | run it again (it replaces both programs) |
+| Homebrew | `brew upgrade sloptopop` |
 
 ## Uninstall
 
-Delete `sloptopop` and `sloptopop-local` from the directory you installed
-them into. In each repository you ran sloptopop on, you can also delete
+| Installed with | Uninstall |
+|---|---|
+| the install script | `rm ~/.local/bin/sloptopop ~/.local/bin/sloptopop-local` (or your `SLOPTOPOP_INSTALL_DIR`) |
+| Homebrew | `brew uninstall sloptopop` (and `brew untap sloptopop/tap`) |
+ In each repository you ran sloptopop on, you can also delete
 these generated directories:
 
 - `.sloptopop/reports/` (analyzer reports);
@@ -135,5 +186,3 @@ The analyzer images, the vulnerability snapshots in your cache
 
 Keep `.sloptopop/rules/` if you wrote your own Opengrep or Semgrep rules
 there.
-
-`TODO(L3)`: the uninstall command for each install path.
