@@ -44,8 +44,9 @@ backend. See
 
 ## Does it collect telemetry?
 
-The current `sloptopop` and `sloptopop-engine` contain no network code:
-no usage data, no install id, no update check. The policy for future
+The current `sloptopop` and `sloptopop-local` send no usage data, no
+install id and no update check; the only network call is the one request
+`check`, `fix` and `transform` send to the sloptopop server. The policy for future
 versions is to be confirmed.
 
 ## Is my code uploaded?
@@ -127,7 +128,7 @@ container runtime can run, unsupported. See [analyzers.md](analyzers.md).
 ## Can I use sloptopop in CI?
 
 Yes. Run `sloptopop check` and use its exit code: 0 passed, 1 not
-passed, 3 the engine is missing or failed. `sloptopop check --format json`
+passed, 3 `sloptopop-local` is missing or failed, 4 no server answered. `sloptopop check --format json`
 gives the machine-readable [Report](report-format.md). Run
 `sloptopop collect` first if you want analyzer results in it.
 
@@ -140,9 +141,12 @@ JSON-RPC 2.0 to it. See [PROTOCOL.md](../PROTOCOL.md).
 ## What is open source?
 
 The `sloptopop` CLI, the protocol and the language libraries, under MIT OR
-Apache-2.0. The engine is a proprietary binary that the CLI starts as a
-separate process; the CLI never links it. The engine's licence terms are
-to be confirmed.
+Apache-2.0, and `sloptopop-local`, the part that runs on your machine
+(masking, applying the verified changes, evidence), under MIT OR
+Apache-2.0. Detection, planning and verification run only on the
+sloptopop server, `sloptopop-engine` (hosted, or self-hosted), which is
+proprietary; nothing proprietary runs on your machine (decision D-0183).
+The self-hosted server's licence terms are to be confirmed.
 
 ## How much does it cost?
 

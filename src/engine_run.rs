@@ -1,10 +1,10 @@
-//! Running `sloptopop-engine` as a child process.
+//! Running `sloptopop-local` as a child process.
 //!
-//! `check` and `fix` never link the engine: they start it and read the
-//! JSON document it prints (see `docs/report-format.md`).
+//! The commands never link `sloptopop local`: they start it and read the
+//! JSON document it prints (see `docs/commands.md`).
 //!
-//! Standards: SCF CFG-03 (Least Functionality: the engine is a separate
-//! process, never linked), TDA-12.1 (a failed start is an error).
+//! Standards: SCF CFG-03 (Least Functionality: `sloptopop local` is a
+//! separate process, never linked), TDA-12.1 (a failed start is an error).
 
 use std::io::Write;
 use std::process::{Command, Output, Stdio};
@@ -12,18 +12,20 @@ use std::process::{Command, Output, Stdio};
 use crate::diagnostic::report;
 use crate::engine_locate::{ENGINE_NAME, Locator};
 
-/// Exit code when the engine is missing, fails, or its output is unusable.
+/// Exit code when `sloptopop-local` is missing, fails, or its output is
+/// unusable.
 pub const ENGINE_ERROR: u8 = 3;
 
-/// Printed when the engine cannot be found.
+/// Printed when `sloptopop-local` cannot be found.
 pub const NOT_FOUND: &str = "\
-error: sloptopop-engine not found
-hint: install sloptopop-engine next to the sloptopop executable or on your PATH,
-      or set SLOPTOPOP_ENGINE to its full path
+error: sloptopop-local not found
+hint: install sloptopop-local next to the sloptopop executable or on your PATH,
+      or set SLOPTOPOP_LOCAL to its full path
 ";
 
-/// Runs the engine with `args`, forwards what it writes to stderr, and
-/// returns its output if it exited with 0 or 1 (its two normal outcomes).
+/// Runs `sloptopop-local` with `args`, forwards what it writes to stderr,
+/// and returns its output if it exited with 0 or 1 (its two normal
+/// outcomes).
 /// Otherwise reports the problem on `stderr` and returns the exit code
 /// to use.
 pub(crate) fn invoke(

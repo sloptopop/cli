@@ -2,28 +2,60 @@
 //! measures product code only.
 use super::*;
 
+fn check(root: &str, format: Format, backend: Option<&str>, yes: bool) -> Command {
+    Command::Check(CheckOptions {
+        root: root.to_owned(),
+        format,
+        backend: backend.map(str::to_owned),
+        yes,
+    })
+}
+
+fn fix(root: &str, apply: bool, backend: Option<&str>, yes: bool) -> Command {
+    Command::Fix(FixOptions {
+        root: root.to_owned(),
+        apply,
+        backend: backend.map(str::to_owned),
+        yes,
+    })
+}
+
 #[test]
 fn check_and_fix_arguments_are_parsed() {
     let cases = [
-        (&["check"][..], Command::Check(".".to_owned(), Format::Text)),
+        (&["check"][..], check(".", Format::Text, None, false)),
         (
             &["check", "--format", "json"],
-            Command::Check(".".to_owned(), Format::Json),
+            check(".", Format::Json, None, false),
+        ),
+        (&["check", "src"], check("src", Format::Text, None, false)),
+        (
+            &[
+                "check",
+                "src",
+                "--format",
+                "text",
+                "--backend",
+                "http://b",
+                "--yes",
+            ],
+            check("src", Format::Text, Some("http://b"), true),
+        ),
+        (&["fix"], fix(".", false, None, false)),
+        (&["fix", "--apply"], fix(".", true, None, false)),
+        (&["fix", "src"], fix("src", false, None, false)),
+        (
+            &["fix", "src", "--apply", "--yes", "--backend", "http://b"],
+            fix("src", true, Some("http://b"), true),
         ),
         (
-            &["check", "src"],
-            Command::Check("src".to_owned(), Format::Text),
-        ),
-        (
-            &["check", "src", "--format", "text"],
-            Command::Check("src".to_owned(), Format::Text),
-        ),
-        (&["fix"], Command::Fix(".".to_owned(), false)),
-        (&["fix", "--apply"], Command::Fix(".".to_owned(), true)),
-        (&["fix", "src"], Command::Fix("src".to_owned(), false)),
-        (
-            &["fix", "src", "--apply"],
-            Command::Fix("src".to_owned(), true),
+            &["local", "evidence", ".", "--run", "x"],
+            Command::Local(vec![
+                "evidence".to_owned(),
+                ".".to_owned(),
+                "--run".to_owned(),
+                "x".to_owned(),
+            ]),
         ),
     ];
     for (args, expected) in cases {
@@ -36,9 +68,16 @@ fn check_and_fix_arguments_are_parsed() {
             "unknown format: xml (expected text or json)",
         ),
         (&["check", "--json"], "unrecognised option: --json"),
-        (&["check", "a", "b"], "unrecognised arguments: check a b"),
+        (&["check", "a", "b"], "unrecognised arguments: check b"),
+        (&["check", "--backend"], "--backend needs a value"),
+        (&["check", "--format"], "--format needs a value"),
+        (&["fix", "--backend"], "--backend needs a value"),
         (&["fix", "--force"], "unrecognised option: --force"),
-        (&["fix", "a", "b"], "unrecognised arguments: fix a b"),
+        (&["fix", "a", "b"], "unrecognised arguments: fix b"),
+        (
+            &["local"],
+            "local needs arguments for sloptopop-local (try: sloptopop local version)",
+        ),
     ] {
         let args: Vec<OsString> = args.iter().map(OsString::from).collect();
         assert_eq!(parse(&args), Err(message.to_owned()), "{args:?}");

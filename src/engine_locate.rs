@@ -1,19 +1,21 @@
-//! Finding `sloptopop-engine`: through the `SLOPTOPOP_ENGINE` environment
+//! Finding `sloptopop-local` (the open-source half of sloptopop on this
+//! machine, decision D-0183): through the `SLOPTOPOP_LOCAL` environment
 //! variable, then next to the `sloptopop` executable, then on `PATH`.
 //!
 //! Standards: SCF CFG-03 (Least Functionality: only the binary named
-//! `sloptopop-engine` is started, from three documented places in a
+//! `sloptopop-local` is started, from three documented places in a
 //! fixed order).
 
 use std::env;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-/// File name of the engine binary (without the platform's suffix).
-pub const ENGINE_NAME: &str = "sloptopop-engine";
+/// File name of the `sloptopop local` binary (without the platform's
+/// suffix).
+pub const ENGINE_NAME: &str = "sloptopop-local";
 
-/// Environment variable naming the engine binary explicitly.
-pub const ENGINE_ENV: &str = "SLOPTOPOP_ENGINE";
+/// Environment variable naming the `sloptopop local` binary explicitly.
+pub const ENGINE_ENV: &str = "SLOPTOPOP_LOCAL";
 
 /// The environment variables `collect` reads (besides `PATH`): its own
 /// settings, where the user's cache is, and the Go module settings its
@@ -39,7 +41,7 @@ pub(crate) const COLLECT_VARS: [&str; 14] = [
 /// environment), captured once so lookups are testable.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Locator {
-    /// The value of `SLOPTOPOP_ENGINE`, if set and not empty.
+    /// The value of `SLOPTOPOP_LOCAL`, if set and not empty.
     pub explicit: Option<OsString>,
     /// The directory holding the running `sloptopop` executable.
     pub exe_dir: Option<PathBuf>,
@@ -80,7 +82,7 @@ impl Locator {
             .map(|(_, value)| value)
     }
 
-    /// The engine to run: `SLOPTOPOP_ENGINE` as given, otherwise the first
+    /// `sloptopop-local`: `SLOPTOPOP_LOCAL` as given, otherwise the first
     /// existing file next to the executable or in a `PATH` directory.
     #[must_use]
     pub fn locate(&self) -> Option<PathBuf> {

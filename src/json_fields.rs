@@ -1,6 +1,6 @@
-//! Lenient field access on the JSON documents `sloptopop-engine` prints:
-//! a missing or mistyped field reads as empty, so newer engines stay
-//! readable.
+//! Lenient field access on the JSON documents of the server and of
+//! `sloptopop-local`: a missing or mistyped field reads as empty, so newer
+//! versions stay readable.
 //!
 //! Standards: SCF TDA-12 (Input Data Validation: a missing or mistyped
 //! field reads as empty, never as a crash).

@@ -11,12 +11,13 @@ pub(crate) const USAGE: &str = "\
 Usage: sloptopop <command>
 
 Commands:
-  check [path] [--format text|json]
-                  Check a repository (default: the current directory);
-                  exit 0 if it passes, 1 if not
-  fix [path] [--apply]
-                  Show the files that mechanical fixes would create;
-                  --apply creates them (existing files are never touched)
+  check [path] [--format text|json] [--backend <url>] [--yes]
+                  Check a repository (default: the current directory) with
+                  the sloptopop server; exit 0 if it passes, 1 if not
+  fix [path] [--apply] [--backend <url>] [--yes]
+                  Show the files the server's mechanical fixes would
+                  create; --apply commits them on a new branch (existing
+                  files are never touched)
   collect [root] [--only <tool,...>] [--rules <dir>] [--dry-run] [--offline]
           [--registry <host[/path]>] [--runtime docker|podman]
           [--timeout <seconds>] [--vuln-db <YYYYMMDD>] [--host-tools]
@@ -28,10 +29,13 @@ Commands:
                   instead (unsupported). Exit code 3: no container runtime
   transform [root] [--apply] [--branch <name>] [--backend <url>] [--yes]
             [--confirm <id,...> --by <name>] [--format text|json]
-                  Plan verified transformations with the sloptopop backend
+                  Plan verified transformations with the sloptopop server
                   and apply them on a new branch (preview; see
                   docs/commands.md#transform-preview); without --apply a
-                  dry run. Shows what it uploads and asks first (--yes in CI)
+                  dry run
+  local <arguments>
+                  Run sloptopop-local (the open-source half on this
+                  machine) with these arguments, e.g. local evidence . --run <id>
   serve --stdio   Run the JSON-RPC server on stdin/stdout (used by the
                   language libraries)
   schema          Print the protocol description as JSON
@@ -41,11 +45,15 @@ Options:
   -h, --help      Print this help
   -V, --version   Print the version
 
-check, fix and transform run the separately installed sloptopop-engine,
-found via the SLOPTOPOP_ENGINE environment variable, next to this
-executable, or on PATH. Exit code 3 means the engine is missing or failed.
-transform sends its one request with curl; exit code 4 means the upload
-was not confirmed or the backend could not be reached or refused it.
+sloptopop detects only on its server (sloptopop-engine): the hosted
+service (the default) or your self-hosted one (--backend <url>). check,
+fix and transform prepare the upload with sloptopop-local (open source),
+found via the SLOPTOPOP_LOCAL environment variable, next to this
+executable, or on PATH; it masks every secret value gitleaks reports, so
+run `sloptopop collect` first. They show what they upload and ask first
+(--yes in CI), then send one request with curl. Exit code 3 means
+sloptopop-local is missing or failed; 4 means the upload was not confirmed
+or the server could not be reached or refused it.
 ";
 
 /// How `check` prints the report.
@@ -95,6 +103,32 @@ pub(crate) struct CollectOptions {
     pub(crate) vuln_db: Option<String>,
 }
 
+/// The options of `check`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CheckOptions {
+    /// The repository root (default: the current directory).
+    pub(crate) root: String,
+    /// How to print the Report.
+    pub(crate) format: Format,
+    /// The server's base URL.
+    pub(crate) backend: Option<String>,
+    /// Upload without asking.
+    pub(crate) yes: bool,
+}
+
+/// The options of `fix`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FixOptions {
+    /// The repository root (default: the current directory).
+    pub(crate) root: String,
+    /// Commit the fixes on a branch (otherwise a dry run).
+    pub(crate) apply: bool,
+    /// The server's base URL.
+    pub(crate) backend: Option<String>,
+    /// Upload without asking.
+    pub(crate) yes: bool,
+}
+
 /// The options of `transform`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TransformOptions {
@@ -119,10 +153,12 @@ pub(crate) struct TransformOptions {
 /// A parsed command line.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Command {
-    /// `check [path] [--format text|json]`.
-    Check(String, Format),
-    /// `fix [path] [--apply]`.
-    Fix(String, bool),
+    /// `check [path] [options]`.
+    Check(CheckOptions),
+    /// `fix [path] [options]`.
+    Fix(FixOptions),
+    /// `local <arguments>`.
+    Local(Vec<String>),
     /// `collect [root] [options]`.
     Collect(CollectOptions),
     /// `transform [root] …`.
@@ -149,6 +185,12 @@ pub(crate) fn parse(args: &[OsString]) -> Result<Command, String> {
         ["fix", rest @ ..] => parse_fix(rest),
         ["collect", rest @ ..] => parse_collect(rest),
         ["transform", rest @ ..] => parse_transform(rest),
+        ["local", rest @ ..] if !rest.is_empty() => Ok(Command::Local(
+            rest.iter().map(|arg| (*arg).to_owned()).collect(),
+        )),
+        ["local"] => {
+            Err("local needs arguments for sloptopop-local (try: sloptopop local version)".into())
+        }
         ["serve", "--stdio"] => Ok(Command::Serve),
         ["serve"] => Err("serve needs a transport: sloptopop serve --stdio".into()),
         ["schema"] => Ok(Command::Schema),
@@ -160,30 +202,56 @@ pub(crate) fn parse(args: &[OsString]) -> Result<Command, String> {
 }
 
 fn parse_check(rest: &[&str]) -> Result<Command, String> {
-    let (path, format) = match rest {
-        [] => (".", "text"),
-        ["--format", format] => (".", *format),
-        [path] => (*path, "text"),
-        [path, "--format", format] => (*path, *format),
-        _ => return Err(format!("unrecognised arguments: check {}", rest.join(" "))),
+    let mut options = CheckOptions {
+        root: ".".to_owned(),
+        format: Format::Text,
+        backend: None,
+        yes: false,
     };
-    let format = match format {
-        "text" => Format::Text,
-        "json" => Format::Json,
-        other => return Err(format!("unknown format: {other} (expected text or json)")),
-    };
-    Ok(Command::Check(checked_path(path)?, format))
+    let mut root = None;
+    let mut rest = rest.iter();
+    while let Some(&arg) = rest.next() {
+        match arg {
+            "--yes" => options.yes = true,
+            "--backend" => options.backend = Some(value(arg, rest.next())?.to_owned()),
+            "--format" => options.format = format(value(arg, rest.next())?)?,
+            path if root.is_none() => root = Some(checked_path(path)?),
+            _ => return Err(format!("unrecognised arguments: check {arg}")),
+        }
+    }
+    options.root = root.unwrap_or_else(|| ".".to_owned());
+    Ok(Command::Check(options))
 }
 
 fn parse_fix(rest: &[&str]) -> Result<Command, String> {
-    let (path, apply) = match rest {
-        [] => (".", false),
-        ["--apply"] => (".", true),
-        [path] => (*path, false),
-        [path, "--apply"] => (*path, true),
-        _ => return Err(format!("unrecognised arguments: fix {}", rest.join(" "))),
+    let mut options = FixOptions {
+        root: ".".to_owned(),
+        apply: false,
+        backend: None,
+        yes: false,
     };
-    Ok(Command::Fix(checked_path(path)?, apply))
+    let mut root = None;
+    let mut rest = rest.iter();
+    while let Some(&arg) = rest.next() {
+        match arg {
+            "--apply" => options.apply = true,
+            "--yes" => options.yes = true,
+            "--backend" => options.backend = Some(value(arg, rest.next())?.to_owned()),
+            path if root.is_none() => root = Some(checked_path(path)?),
+            _ => return Err(format!("unrecognised arguments: fix {arg}")),
+        }
+    }
+    options.root = root.unwrap_or_else(|| ".".to_owned());
+    Ok(Command::Fix(options))
+}
+
+/// The output format `name` names.
+fn format(name: &str) -> Result<Format, String> {
+    match name {
+        "text" => Ok(Format::Text),
+        "json" => Ok(Format::Json),
+        other => Err(format!("unknown format: {other} (expected text or json)")),
+    }
 }
 
 fn parse_collect(rest: &[&str]) -> Result<Command, String> {
@@ -291,15 +359,7 @@ fn parse_transform(rest: &[&str]) -> Result<Command, String> {
                     .filter(|id| !id.is_empty())
                     .map(str::to_owned),
             ),
-            "--format" => {
-                options.format = match value(arg, rest.next())? {
-                    "text" => Format::Text,
-                    "json" => Format::Json,
-                    other => {
-                        return Err(format!("unknown format: {other} (expected text or json)"));
-                    }
-                };
-            }
+            "--format" => options.format = format(value(arg, rest.next())?)?,
             path if root.is_none() => root = Some(checked_path(path)?),
             _ => return Err(format!("unrecognised option or argument: {arg}")),
         }

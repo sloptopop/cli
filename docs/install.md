@@ -9,10 +9,12 @@ sloptopop comes as two programs:
 | Program | What it does | Licence |
 |---|---|---|
 | `sloptopop` | The command-line tool you run: `check`, `fix`, `collect`, `transform`. Also the JSON-RPC server the language libraries talk to. | MIT OR Apache-2.0 (open source, this repository) |
-| `sloptopop-engine` | The analysis engine. `sloptopop` starts it as a separate process for `check`, `fix` and `transform`. | Proprietary binary. Its licence terms are to be confirmed. |
+| `sloptopop-local` | The open-source half on your machine: it prepares the masked snapshot, applies the server's verified changes and runs your checks. `sloptopop` starts it as a separate process for `check`, `fix`, `transform` and `local`. | MIT OR Apache-2.0 (open source) |
 
-`sloptopop collect` works without the engine. `check`, `fix` and
-`transform` need it.
+sloptopop detects on its server, `sloptopop-engine` (hosted, or
+self-hosted from the same image); nothing proprietary is installed on your
+machine. `sloptopop collect` works without `sloptopop-local`. `check`,
+`fix` and `transform` need it and a server.
 
 ## Supported platforms
 
@@ -29,7 +31,7 @@ Planned release targets:
 
 - be POSIX `sh`;
 - verify the checksum of every file it downloads before installing it;
-- install `sloptopop` and `sloptopop-engine` into the same directory.
+- install `sloptopop` and `sloptopop-local` into the same directory.
 
 ```sh
 # TODO(L3): install command
@@ -46,28 +48,28 @@ Planned release targets:
 ## `cargo install` (CLI only)
 
 The open-source CLI builds from source with Cargo. This installs only
-`sloptopop`, not the engine.
+`sloptopop`, not `sloptopop-local`.
 
 ```sh
 # TODO(L3): cargo install command (package name and version)
 ```
 
-## Where the engine must be
+## Where `sloptopop-local` must be
 
-`sloptopop` looks for `sloptopop-engine` in this order and uses the first
+`sloptopop` looks for `sloptopop-local` in this order and uses the first
 match:
 
-1. the path in the `SLOPTOPOP_ENGINE` environment variable;
-2. `sloptopop-engine` in the same directory as the `sloptopop` executable;
-3. `sloptopop-engine` in a directory on your `PATH`.
+1. the path in the `SLOPTOPOP_LOCAL` environment variable;
+2. `sloptopop-local` in the same directory as the `sloptopop` executable;
+3. `sloptopop-local` in a directory on your `PATH`.
 
 If none is found, `check`, `fix` and `transform` stop with exit code 3 and
 this message:
 
 ```
-error: sloptopop-engine not found
-hint: install sloptopop-engine next to the sloptopop executable or on your PATH,
-      or set SLOPTOPOP_ENGINE to its full path
+error: sloptopop-local not found
+hint: install sloptopop-local next to the sloptopop executable or on your PATH,
+      or set SLOPTOPOP_LOCAL to its full path
 ```
 
 ## Verify the download
@@ -79,11 +81,11 @@ the public signing key, and the exact verification commands.
 
 ```sh
 sloptopop --version          # prints: sloptopop <version> (protocol 1)
-sloptopop check .            # runs the engine on the current directory
+sloptopop check .            # asks the server (hosted by default) for the Report
 ```
 
 `sloptopop check` exits 0 when the repository passes, 1 when it does not,
-and 3 when the engine is missing or fails. See
+and 3 when `sloptopop-local` is missing or fails. See
 [troubleshooting.md](troubleshooting.md) if it exits 3.
 
 ## Analyzers: a container runtime
@@ -108,15 +110,16 @@ mirror or proxy, set `SLOPTOPOP_REGISTRY`. See
 
 ## Updates
 
-The current `sloptopop` and `sloptopop-engine` contain no update check and
-make no network call to sloptopop. How updates will be delivered is to be
+The current `sloptopop` and `sloptopop-local` contain no update check;
+`sloptopop` makes one network call, to the sloptopop server, when you run
+`check`, `fix` or `transform`. How updates will be delivered is to be
 confirmed.
 
 `TODO(L3)`: how to update with each install path above.
 
 ## Uninstall
 
-Delete `sloptopop` and `sloptopop-engine` from the directory you installed
+Delete `sloptopop` and `sloptopop-local` from the directory you installed
 them into. In each repository you ran sloptopop on, you can also delete
 these generated directories:
 

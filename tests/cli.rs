@@ -1,9 +1,9 @@
 //! End-to-end checks for the `sloptopop` binary: the CLI commands, and
 //! every case in `conformance/cases` run against `serve --stdio`.
 //!
-//! `check` and `fix` are tested against the committed fake engine in
-//! `tests/fake-engine/`, which speaks the public Report contract. The real
-//! engine is proprietary and is never needed here. `collect` is tested
+//! `check`, `fix` and `transform` are tested against the committed fake
+//! `sloptopop-local` in `tests/fake-local/` and the fake curl in
+//! `tests/fake-curl/`: no server is ever needed here. `collect` is tested
 //! against the committed fake container runtime in `tests/fake-runtime/`
 //! (and, for `--host-tools`, the fake analyzers in `tests/fake-tools/`).
 
@@ -13,8 +13,8 @@ use std::path::Path;
 
 use serde_json::Value;
 use support::{
-    FAKE_ENGINE, FAKE_ENGINE_DIR, FAKE_TOOLS, checked_inputs, collect, collect_fixture,
-    collect_with, frame, matches, run, run_engine, scratch, unframe,
+    FAKE_LOCAL, FAKE_LOCAL_DIR, FAKE_TOOLS, checked_inputs, collect, collect_fixture, collect_with,
+    frame, matches, run, run_engine, scratch, unframe,
 };
 
 /// Helpers shared by the tests below.
@@ -30,32 +30,37 @@ mod support {
 
     const BIN: &str = env!("CARGO_BIN_EXE_sloptopop");
 
-    /// Runs `sloptopop` with `SLOPTOPOP_ENGINE` set to `engine` (or unset)
+    /// Runs `sloptopop` with `SLOPTOPOP_LOCAL` set to `engine` (or unset)
     /// and `PATH` set to `path`.
     pub(crate) fn run_engine(args: &[&str], engine: Option<&OsStr>, path: &OsStr) -> Output {
         let mut command = Command::new(BIN);
         command
             .args(args)
             .env("PATH", path)
-            .env_remove("SLOPTOPOP_ENGINE");
+            .env_remove("SLOPTOPOP_LOCAL");
         if let Some(engine) = engine {
-            command.env("SLOPTOPOP_ENGINE", engine);
+            command.env("SLOPTOPOP_LOCAL", engine);
         }
         command.output().expect("binary should run")
     }
 
-    /// Directory holding the committed fake engine, named like the real one.
-    pub(crate) const FAKE_ENGINE_DIR: &str =
-        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fake-engine");
+    /// Directory holding the committed fake `sloptopop-local`, named like
+    /// the real one.
+    pub(crate) const FAKE_LOCAL_DIR: &str =
+        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fake-local");
+
+    /// `PATH` with the fake curl first, then the system's tools.
+    pub(crate) const CURL_PATH: &str =
+        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fake-curl:/bin:/usr/bin");
 
     /// Directory of the committed fake analyzers that report findings.
     pub(crate) const FAKE_TOOLS: &str =
         concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fake-tools/findings");
 
-    /// The committed fake engine.
-    pub(crate) const FAKE_ENGINE: &str = concat!(
+    /// The committed fake `sloptopop-local`.
+    pub(crate) const FAKE_LOCAL: &str = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/tests/fake-engine/sloptopop-engine"
+        "/tests/fake-local/sloptopop-local"
     );
 
     /// A fresh directory under Cargo's per-target temporary directory.
@@ -93,7 +98,7 @@ mod support {
             .env("PATH", path)
             .env("SLOPTOPOP_REGISTRY", "reg.example")
             .env("SLOPTOPOP_CACHE_DIR", cache)
-            .env_remove("SLOPTOPOP_ENGINE");
+            .env_remove("SLOPTOPOP_LOCAL");
         for name in [
             "SLOPTOPOP_CONTAINER_RUNTIME",
             "SLOPTOPOP_COLLECT_MEMORY",
@@ -130,12 +135,20 @@ mod support {
         collect_with(args, &fake_docker())
     }
 
-    /// The report paths the fake engine's `check` read in `root`.
+    /// The report paths the fake `sloptopop-local`'s Report lists for `root`.
     pub(crate) fn checked_inputs(root: &str) -> Vec<String> {
         let check = run_engine(
-            &["check", root, "--format", "json"],
-            Some(OsStr::new(FAKE_ENGINE)),
-            OsStr::new(""),
+            &[
+                "check",
+                root,
+                "--format",
+                "json",
+                "--backend",
+                "http://ok.test",
+                "--yes",
+            ],
+            Some(OsStr::new(FAKE_LOCAL)),
+            OsStr::new(CURL_PATH),
         );
         assert_eq!(check.status.code(), Some(0), "check exit code");
         let report: Value = serde_json::from_slice(&check.stdout).expect("Report");
@@ -292,27 +305,36 @@ fn framing_error_exits_1() {
     );
 }
 
+/// `sloptopop <args> --backend http://ok.test --yes` with the fake
+/// `sloptopop-local` named by the environment and the fake curl on `PATH`.
 fn fake(args: &[&str]) -> std::process::Output {
-    run_engine(args, Some(OsStr::new(FAKE_ENGINE)), OsStr::new(""))
+    let mut all = args.to_vec();
+    all.extend(["--backend", "http://ok.test", "--yes"]);
+    run_engine(
+        &all,
+        Some(OsStr::new(FAKE_LOCAL)),
+        OsStr::new(support::CURL_PATH),
+    )
 }
 
 #[test]
-fn check_runs_the_engine_named_by_the_environment() {
-    let json = fake(&["check", "fail", "--format", "json"]);
-    assert_eq!(json.status.code(), Some(1), "engine exit code");
-    let expected = std::process::Command::new(FAKE_ENGINE)
-        .args(["check", "fail"])
-        .output()
-        .expect("fake engine runs");
+fn check_runs_sloptopop_local_named_by_the_environment() {
+    let root = scratch("check-fail").join("fail");
+    fs::create_dir_all(&root).expect("root");
+    let root = root.to_str().expect("UTF-8");
+    let json = fake(&["check", root, "--format", "json"]);
+    assert_eq!(json.status.code(), Some(1), "exit code");
+    let report: Value = serde_json::from_slice(&json.stdout).expect("Report");
     assert_eq!(
-        json.stdout, expected.stdout,
-        "Report passed through unchanged"
+        report["passed"], false,
+        "the server's Report, passed through"
     );
     assert!(
-        String::from_utf8_lossy(&json.stderr).starts_with("fake-engine: check fail\n"),
-        "engine stderr forwarded"
+        String::from_utf8_lossy(&json.stderr)
+            .starts_with(&format!("fake-local: request {root} --mode check\n")),
+        "stderr forwarded"
     );
-    let text = fake(&["check", "fail"]);
+    let text = fake(&["check", root]);
     assert_eq!(text.status.code(), Some(1), "text exit code");
     let text = String::from_utf8_lossy(&text.stdout);
     assert!(
@@ -320,89 +342,85 @@ fn check_runs_the_engine_named_by_the_environment() {
         "{text}"
     );
     assert!(
-        text.contains("src/a.py:1  analyzer.finding\n    ruff F401: `os` imported but unused"),
-        "a finding with an origin and a report with an analysis render: {text}"
-    );
-    assert!(
         text.contains("rust-toolchain.toml  toolchain.unpinned  [STD-1]"),
         "{text}"
     );
-    assert!(text.contains("src/a.py:3  errors.swallowed"), "{text}");
-    assert!(text.contains("STD-2   notChecked  Formatting"), "{text}");
-    let passed = fake(&["check", "pass"]);
-    assert_eq!(passed.status.code(), Some(0), "passed exit code");
+    assert!(text.contains("src/a.ts:9  errors.swallowed"), "{text}");
+    let passed = scratch("check-pass");
+    let out = fake(&["check", passed.to_str().expect("UTF-8")]);
+    assert_eq!(out.status.code(), Some(0), "passed exit code");
     assert!(
-        String::from_utf8_lossy(&passed.stdout).starts_with("sloptopop check: passed"),
+        String::from_utf8_lossy(&out.stdout).starts_with("sloptopop check: passed"),
         "passed text"
     );
 }
 
 #[test]
-fn fix_renders_the_plan_and_passes_apply() {
-    let dry = fake(&["fix", "fail"]);
-    assert_eq!(dry.status.code(), Some(0), "dry run exit code");
-    assert_eq!(
-        String::from_utf8_lossy(&dry.stdout),
-        "sloptopop fix: dry run, nothing written\n  exists   .gitignore  (template gitignore)\n  planned  rust-toolchain.toml  (template rust-toolchain)\nRun `sloptopop fix --apply` to create the planned files.\n",
-        "dry run text"
-    );
-    let applied = fake(&["fix", "fail", "--apply"]);
+fn fix_prints_the_summary_and_passes_apply() {
+    let root = scratch("fix-plain");
+    let root = root.to_str().expect("UTF-8");
+    let applied = fake(&["fix", root, "--apply"]);
     assert!(
-        String::from_utf8_lossy(&applied.stderr).starts_with("fake-engine: fix fail --apply\n"),
-        "--apply passed to the engine"
+        String::from_utf8_lossy(&applied.stderr).contains(&format!(
+            "fake-local: apply {root} --run 0123456789abcdef --apply\n"
+        )),
+        "--apply passed on"
     );
     assert_eq!(
-        String::from_utf8_lossy(&applied.stdout),
-        "sloptopop fix: applied\n  created  rust-toolchain.toml  (template rust-toolchain)\n",
-        "applied text"
+        (
+            applied.status.code(),
+            String::from_utf8_lossy(&applied.stdout).into_owned()
+        ),
+        (Some(0), "# summary of 0123456789abcdef\n".to_owned()),
+        "the summary"
     );
 }
 
 #[test]
-fn engine_on_path_is_found() {
-    let out = run_engine(&["fix", "pass"], None, OsStr::new(FAKE_ENGINE_DIR));
+fn local_on_path_is_found() {
+    let mut path = std::ffi::OsString::from(FAKE_LOCAL_DIR);
+    path.push(":");
+    path.push(support::CURL_PATH);
+    let out = run_engine(&["local", "version"], None, &path);
     assert_eq!(out.status.code(), Some(0), "exit 0");
     assert_eq!(
         String::from_utf8_lossy(&out.stdout),
-        "sloptopop fix: dry run, nothing written\n  nothing to fix\n",
-        "rendered"
+        "sloptopop-local 0.1.0\n",
+        "passed through"
     );
 }
 
 #[test]
-fn engine_failures_exit_3() {
+fn local_failures_exit_3() {
+    let dir = scratch("local-failures");
     for (mode, message) in [
-        ("garbage", "error: sloptopop-engine printed invalid JSON: "),
+        ("garbage", "error: sloptopop-local printed invalid JSON: "),
         (
             "broken",
-            "error: boom\nerror: sloptopop-engine failed (exit status: 3)",
+            "error: the working tree has uncommitted or untracked changes\nerror: sloptopop-local failed (exit status: 3)",
         ),
-        ("killed", "error: sloptopop-engine failed (signal: 9"),
-        ("other", "error: sloptopop-engine failed (exit status: 2)"),
     ] {
-        let out = fake(&["check", mode]);
+        let root = dir.join(mode);
+        fs::create_dir_all(&root).expect("root");
+        let out = fake(&["check", root.to_str().expect("UTF-8")]);
         assert_eq!(out.status.code(), Some(3), "{mode}: exit 3");
         assert!(out.stdout.is_empty(), "{mode}: nothing on stdout");
         let stderr = String::from_utf8_lossy(&out.stderr);
-        assert!(
-            stderr.starts_with(&format!("fake-engine: check {mode}\n")),
-            "{mode}: engine stderr forwarded first"
-        );
         assert!(stderr.contains(message), "{mode}: {stderr}");
     }
 }
 
 #[test]
-fn missing_engine_exits_3_with_a_hint() {
-    let empty = scratch("no-engine");
+fn missing_local_exits_3_with_a_hint() {
+    let empty = scratch("no-local");
     let out = run_engine(&["check"], None, empty.as_os_str());
     assert_eq!(out.status.code(), Some(3), "exit 3");
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
-        stderr.starts_with("error: sloptopop-engine not found"),
+        stderr.starts_with("error: sloptopop-local not found"),
         "{stderr}"
     );
-    assert!(stderr.contains("SLOPTOPOP_ENGINE"), "hint");
+    assert!(stderr.contains("SLOPTOPOP_LOCAL"), "hint");
 }
 
 /// Every entry that runs on the fixture, with the exit code the fake

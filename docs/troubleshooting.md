@@ -8,30 +8,30 @@ Find the message you see, then follow the steps.
 |---|---|---|
 | 1 | `check`: the repository did not pass. Not an error: see the findings. | [rules.md](rules.md) |
 | 2 | Usage error. | [Usage errors](#usage-errors-exit-code-2) |
-| 3 | The engine is missing, could not start, failed, or printed invalid output. | [Engine problems](#engine-problems-exit-code-3) |
+| 3 | `sloptopop-local` is missing, could not start, failed, or printed invalid output. | [sloptopop-local problems](#sloptopop-local-problems-exit-code-3) |
 
-## Engine problems (exit code 3)
+## sloptopop-local problems (exit code 3)
 
-### `error: sloptopop-engine not found`
+### `error: sloptopop-local not found`
 
-`sloptopop` could not find the engine. It looks, in order, at:
+`sloptopop` could not find `sloptopop-local`. It looks, in order, at:
 
-1. the `SLOPTOPOP_ENGINE` environment variable;
+1. the `SLOPTOPOP_LOCAL` environment variable;
 2. the directory of the `sloptopop` executable;
 3. your `PATH`.
 
 Fix it in one of these ways:
 
-- install `sloptopop-engine` next to `sloptopop` (see
+- install `sloptopop-local` next to `sloptopop` (see
   [install.md](install.md));
 - put its directory on your `PATH`;
-- set `SLOPTOPOP_ENGINE` to its full path.
+- set `SLOPTOPOP_LOCAL` to its full path.
 
-Check with `command -v sloptopop sloptopop-engine`.
+Check with `command -v sloptopop sloptopop-local`.
 
 ### `error: cannot run <path>: …`
 
-The engine was found but could not start. Common causes:
+`sloptopop-local` was found but could not start. Common causes:
 
 - the file is not executable: `chmod +x <path>`;
 - it was built for another platform or CPU (for example an x86_64 binary
@@ -39,18 +39,18 @@ The engine was found but could not start. Common causes:
 - on macOS, the system blocked a downloaded binary: check the file's
   signature and quarantine status before allowing it.
 
-If `SLOPTOPOP_ENGINE` is set, it is used as given, even if the file does
+If `SLOPTOPOP_LOCAL` is set, it is used as given, even if the file does
 not exist. Unset it or correct it.
 
-### `error: sloptopop-engine failed (…)`
+### `error: sloptopop-local failed (…)`
 
-The engine exited with an unexpected status. Its own message is printed
+`sloptopop-local` exited with an unexpected status. Its own message is printed
 just above this line (`error: …`). The usual cause is a path that does not
 exist or cannot be read. Check the path you passed to `check` or `fix`.
 
-### `error: sloptopop-engine printed invalid JSON: …`
+### `error: sloptopop-local printed invalid JSON: …`
 
-`sloptopop` and `sloptopop-engine` probably come from different releases.
+`sloptopop` and `sloptopop-local` probably come from different releases.
 Install matching versions of both. `sloptopop --version` shows the CLI's
 version.
 

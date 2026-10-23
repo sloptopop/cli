@@ -19,7 +19,7 @@ data in a report.
 
 ## Scope
 
-This policy covers the `sloptopop` command-line tool, its JSON-RPC server, the protocol (PROTOCOL.md), the conformance cases and the Semgrep rule pack in this repository. Reports about the closed `sloptopop-engine` binary, which the CLI starts, and about the sloptopop backend are welcome here too.
+This policy covers the `sloptopop` command-line tool, its JSON-RPC server, the protocol (PROTOCOL.md), the conformance cases and the Semgrep rule pack in this repository. Reports about `sloptopop local` (the open-source `sloptopop-local` binary the CLI starts, in its own repository) and about the sloptopop server (`sloptopop-engine`, hosted at `https://api.sloptopop.dev` or self-hosted) are welcome here too.
 
 Problems in third-party analyzers that `sloptopop collect` runs belong to
 those projects; we are glad to hear about them if sloptopop's use of a tool

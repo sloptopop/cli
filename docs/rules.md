@@ -6,13 +6,19 @@ which controls it maps to, and what to do.
 - **Severity.** Each finding is an `error` or a `warning`. Under the
   `strict` profile, which `check` uses, every finding fails the
   repository, warnings included.
-- **Determinism.** Every rule is a pure function of the files in the
-  repository (and the analyzer reports in `.sloptopop/reports/`). The same
-  content always gives the same findings. No rule needs the network.
-- **What is read.** Files git tracks are always read, even if `.gitignore`
-  lists them. Untracked files that `.gitignore` ignores are skipped, and so
-  are build output, dependency directories, files over 1 MiB, files that
-  are not UTF-8, and symbolic links.
+- **Where rules run.** Every rule runs on the sloptopop server
+  (`sloptopop-engine`, hosted or self-hosted), on the masked snapshot that
+  `sloptopop local` builds and you confirm before upload. Nothing is
+  detected on your machine; without a server there is no check.
+- **Determinism.** Every rule is a pure function of the snapshot (and the
+  analyzer reports `sloptopop collect` wrote to `.sloptopop/reports/`).
+  The same content always gives the same findings, and every Report names
+  the Detector, rule and analyzer versions and digests.
+- **What is read.** The snapshot holds the files of the commit `HEAD`
+  points to. Build output, dependency directories, real environment
+  files, files over 1 MiB, files that are not UTF-8, and symbolic links
+  are left out (see [safety.md](safety.md)), and every secret value the
+  secret scanner reports is masked.
 - **Secrets are never printed.** A message never contains a secret value.
 
 ## How controls are shown
@@ -38,7 +44,8 @@ Application Security Verification Standard 5.0; ISO 27001 = ISO/IEC
 are at the [end of this page](#attribution).
 
 "Automatic fix" names what sloptopop can do about a finding:
-`sloptopop fix` creates a missing file; a **transformation** is applied by
+`sloptopop fix` creates a missing file (a step the server returns and
+`sloptopop local` commits); a **transformation** is applied by
 `sloptopop transform` (see [transformations.md](transformations.md)).
 
 ## Contents

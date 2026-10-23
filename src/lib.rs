@@ -4,14 +4,15 @@
 //! `sloptopop serve --stdio` as a child process and exchanges JSON-RPC 2.0
 //! messages with LSP-style `Content-Length` framing. See `PROTOCOL.md`.
 //!
-//! `sloptopop check` and `sloptopop fix` start the separately installed
-//! `sloptopop-engine` binary as a child process and exchange the Report
-//! JSON with it (see `docs/report-format.md`); this crate never links it.
-//!
-//! `sloptopop transform` (preview) also starts the engine, twice, and
-//! between the two posts the request the engine prepared to the sloptopop
-//! backend with `curl`, after showing what it sends and asking: the only
-//! network call sloptopop makes (see `docs/commands.md`).
+//! sloptopop detects only on its server, `sloptopop-engine` (hosted, or
+//! self-hosted from the same image; decision D-0183). `sloptopop check`,
+//! `fix` and `transform` start the open-source `sloptopop-local` binary to
+//! prepare the masked snapshot, post it to the server with `curl` after
+//! showing what is sent and asking (the only network call sloptopop
+//! makes), and start `sloptopop-local` again to print the server's Report
+//! or apply its verified changes on a new branch (see `docs/commands.md`).
+//! `sloptopop local …` runs `sloptopop-local` directly. This crate never
+//! links either.
 //!
 //! `sloptopop collect` runs the analyzers that apply from sloptopop's
 //! pinned container images (a checked-in catalogue, every image by digest),
@@ -28,12 +29,13 @@
 //!    `collect_lookup`, `collect_pack`, `diagnostic`, `engine_locate`,
 //!    `framing`, `handshake`, `json_fields`, `jsonrpc`, `backend_post`
 //!    (no crate imports)
-//! 1. `collect_catalogue`, `collect_runtime`, `engine_run`, `render_fix`,
+//! 1. `collect_catalogue`, `collect_runtime`, `engine_run`,
 //!    `render_manifest`, `render_report`, `schema`, `session`
 //! 2. `collect_container`, `collect_data`, `collect_image`, `collect_plan`,
 //!    `command_io`, `server`
-//! 3. `check_command`, `collect_run`, `fix_command`, `transform_command`
-//! 4. `collect_record`
+//! 3. `collect_run`, `local_command`, `server_command` (the shared exchange
+//!    with the server)
+//! 4. `check_command`, `collect_record`, `fix_command`, `transform_command`
 //! 5. `collect_command`
 //! 6. `cli`
 //! 7. this file: declares the modules and re-exports the public API
@@ -71,21 +73,22 @@ pub mod framing;
 mod handshake;
 mod json_fields;
 mod jsonrpc;
-mod render_fix;
+mod local_command;
 mod render_manifest;
 mod render_report;
 pub mod schema;
 pub mod server;
+mod server_command;
 mod session;
 mod transform_command;
 
-/// Running `sloptopop-engine`, the separately installed engine binary.
+/// Running `sloptopop-local`, the open-source half of sloptopop on this
+/// machine.
 ///
-/// `check` and `fix` never link the engine: they start it as a child
-/// process and read the JSON document it prints (see
-/// `docs/report-format.md`). The engine is found through the
-/// `SLOPTOPOP_ENGINE` environment variable, then next to the `sloptopop`
-/// executable, then on `PATH`.
+/// The commands never link it: they start it as a child process and read
+/// the JSON document it prints (see `docs/commands.md`). It is found
+/// through the `SLOPTOPOP_LOCAL` environment variable, then next to the
+/// `sloptopop` executable, then on `PATH`.
 pub mod engine {
     pub use crate::engine_locate::{ENGINE_ENV, ENGINE_NAME, Locator};
     pub use crate::engine_run::{ENGINE_ERROR, NOT_FOUND};
@@ -103,12 +106,11 @@ pub mod protocol {
     pub use crate::jsonrpc::{ErrorObject, Id, Message, error_code, failure, success};
 }
 
-/// Readable text for the JSON documents `sloptopop-engine` prints.
+/// Readable text for the JSON documents sloptopop prints.
 ///
 /// Only the public Report format is read; unknown fields are ignored and
-/// missing ones render as empty, so newer engines stay readable.
+/// missing ones render as empty, so newer servers stay readable.
 pub mod render {
-    pub use crate::render_fix::fix;
     pub use crate::render_report::report;
 }
 

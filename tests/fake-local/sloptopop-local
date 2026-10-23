@@ -1,0 +1,81 @@
+#!/bin/sh
+# Fake sloptopop-local for the cli tests: it speaks the documents the cli
+# reads (docs/commands.md) and nothing else. Every call first echoes its
+# arguments to stderr, so tests can check what the cli passed.
+#
+#   sloptopop-local request <root> --mode <mode>
+#     a root ending in /broken fails (exit 3), one ending in /garbage
+#     prints text; any other root gets a request file and the document
+#     naming it, the mode recorded in the request.
+#   sloptopop-local report <root> --run <id>
+#     needs the response the cli wrote (exit 3 without); a root ending in
+#     /fail prints a failing Report with three findings (exit 1), one
+#     ending in /badreport prints text, one ending in /badanswer fails (exit 3);
+#     any other root prints a passing Report (exit 0) whose
+#     analysis.inputs lists the visible files of .sloptopop/reports/.
+#   sloptopop-local apply <root> --run <id> [options]
+#     needs the response; fails for a root ending in /failing, writes
+#     SUMMARY.md (not for a root ending in /nosummary) and prints a report
+#     echoing its arguments: exit 0 with --apply, 1 without.
+#   sloptopop-local version | anything else
+#     the version, or a usage error (exit 2).
+#   sloptopop-local pass|fail|garbage|broken|other|killed
+#     '{}' with exit 0 or 1, text, exit 3, exit 2, a signal.
+echo "fake-local: $*" >&2
+run=0123456789abcdef
+# How the cli's runner sees it: a document and exit 0 or 1, garbage, a
+# failure, a usage error, a signal.
+case $1 in
+  pass) echo '{}'; exit 0 ;;
+  fail) echo '{}'; exit 1 ;;
+  garbage) echo "not json"; exit 0 ;;
+  broken) echo "error: boom" >&2; exit 3 ;;
+  other) exit 2 ;;
+  killed) kill -9 $$ ;;
+esac
+case $1 in
+  request)
+    case $2 in
+      */broken) echo "error: the working tree has uncommitted or untracked changes" >&2; exit 3 ;;
+      */garbage) echo "not json"; exit 0 ;;
+    esac
+    dir="$2/.sloptopop/transform/$run"
+    mkdir -p "$dir"
+    printf '{"schemaVersion":2,"mode":"%s","base":"0000000000000000000000000000000000000000","name":"repo","files":[]}' "$4" > "$dir/request.json"
+    printf '%s\n' "{\"schemaVersion\":1,\"run\":\"$run\",\"base\":\"0000000000000000000000000000000000000000\",\"request\":\".sloptopop/transform/$run/request.json\",\"response\":\".sloptopop/transform/$run/response.json\",\"manifest\":{\"mode\":\"$4\",\"files\":2,\"bytes\":29,\"requestBytes\":20,\"context\":false,\"masked\":{\"values\":1,\"files\":[\"src/config.ts\"],\"scanner\":\"gitleaks\"},\"excluded\":{\"count\":0,\"byReason\":{},\"paths\":[]},\"reports\":{\"sent\":[\"gitleaks.sarif\"],\"left\":[],\"record\":true}}}"
+    exit 0 ;;
+  report|apply)
+    dir="$2/.sloptopop/transform/$4"
+    if [ ! -f "$dir/response.json" ]; then
+      echo "error: cannot read the response" >&2
+      exit 3
+    fi ;;
+  version) echo "sloptopop-local 0.1.0"; exit 0 ;;
+  *) echo "error: unrecognised arguments: $*" >&2; exit 2 ;;
+esac
+if [ "$1" = report ]; then
+  case $2 in
+    */badanswer) echo "error: the response does not answer this run's request" >&2; exit 3 ;;
+    */badreport) echo "not json"; exit 0 ;;
+    */fail) printf '%s\n' '{"schemaVersion":2,"root":".","ecosystems":["rust"],"findings":[{"rule":"toolchain.unpinned","severity":"error","path":"rust-toolchain.toml","message":"Rust toolchain is not pinned to an exact version","control":"STD-1"},{"rule":"secrets.committed","severity":"error","path":"src/config.ts","line":4,"message":"gitleaks aws-access-token: a secret was found","origins":[{"tool":"gitleaks","rule":"aws-access-token","source":"client"}]},{"rule":"errors.swallowed","severity":"warning","path":"src/a.ts","line":9,"message":"Error handler discards the error"}],"controls":[{"id":"STD-1","title":"Pinned toolchain","status":"fail"}],"passed":false}'; exit 1 ;;
+  esac
+  inputs=""
+  if [ -d "$2/.sloptopop/reports" ]; then
+    for f in "$2"/.sloptopop/reports/*; do
+      [ -f "$f" ] || continue
+      inputs="$inputs{\"path\":\".sloptopop/reports/${f##*/}\"},"
+    done
+  fi
+  printf '{"schemaVersion":2,"root":".","ecosystems":["rust"],"findings":[],"controls":[],"passed":true,"analysis":{"inputs":[%s]}}\n' "${inputs%,}"
+  exit 0
+fi
+case $2 in
+  */failing) echo "error: HEAD moved since the request was made" >&2; exit 3 ;;
+  */nosummary) ;;
+  *) printf '# summary of %s\n' "$4" > "$dir/SUMMARY.md" ;;
+esac
+printf '{"schemaVersion":2,"args":"%s"}\n' "$*"
+case " $* " in
+  *" --apply "*) exit 0 ;;
+  *) exit 1 ;;
+esac

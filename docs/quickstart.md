@@ -2,7 +2,7 @@
 
 This walk-through runs sloptopop on a small sample repository: check it,
 collect analyzer reports, check again, then transform it. It takes about
-ten minutes. You need `sloptopop` and `sloptopop-engine` installed (see
+ten minutes. You need `sloptopop` and `sloptopop-local` installed, and a sloptopop server (the hosted one, or yours) (see
 [install.md](install.md)), plus `git`.
 
 ## 1. Create the sample repository

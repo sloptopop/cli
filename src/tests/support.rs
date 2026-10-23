@@ -37,11 +37,24 @@ impl Drop for TempDir {
     }
 }
 
-/// The committed fake engine.
-pub(crate) const FAKE_ENGINE: &str = concat!(
+/// The committed fake `sloptopop-local`.
+pub(crate) const FAKE_LOCAL: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/tests/fake-engine/sloptopop-engine"
+    "/tests/fake-local/sloptopop-local"
 );
+
+/// The directory of the committed fake curl.
+pub(crate) const CURL_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fake-curl");
+
+/// A locator with the fake `sloptopop-local` and the fake curl on `PATH`.
+pub(crate) fn fake_local() -> Locator {
+    Locator {
+        explicit: Some(OsString::from(FAKE_LOCAL)),
+        exe_dir: None,
+        path: Some(OsString::from(CURL_DIR)),
+        vars: Vec::new(),
+    }
+}
 
 /// A locator that only knows `engine`.
 pub(crate) fn explicit(engine: &Path) -> Locator {

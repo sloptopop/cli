@@ -1,8 +1,8 @@
-//! Output handling shared by the engine-backed commands: reading the JSON
-//! document the engine printed and writing the result to stdout.
+//! Output handling shared by the commands that run `sloptopop-local`:
+//! reading the JSON document it printed and writing the result to stdout.
 //!
-//! Standards: SCF TDA-12 (Input Data Validation: the engine's output
-//! must be JSON), TDA-12.1 (Error Handling).
+//! Standards: SCF TDA-12 (Input Data Validation: its output must be
+//! JSON), TDA-12.1 (Error Handling).
 
 use std::io::Write;
 
@@ -12,7 +12,7 @@ use crate::diagnostic::report;
 use crate::engine_locate::ENGINE_NAME;
 use crate::engine_run::ENGINE_ERROR;
 
-/// Parses the engine's stdout as JSON; if it isn't, reports that and
+/// Parses `sloptopop-local`'s stdout as JSON; if it isn't, reports that and
 /// returns [`ENGINE_ERROR`].
 pub(crate) fn parse_document(bytes: &[u8], stderr: &mut dyn Write) -> Result<Value, u8> {
     serde_json::from_slice(bytes).map_err(|e| {

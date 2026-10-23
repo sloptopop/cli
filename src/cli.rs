@@ -14,6 +14,7 @@ use crate::diagnostic::report;
 use crate::engine_locate::Locator;
 use crate::fix_command::fix;
 use crate::handshake::{PROTOCOL_VERSION, SERVER_VERSION};
+use crate::local_command::local;
 use crate::schema;
 use crate::server;
 use crate::transform_command::transform;
@@ -22,7 +23,8 @@ use crate::transform_command::transform;
 pub const USAGE_ERROR: u8 = 2;
 
 /// Runs the CLI with explicit streams and returns the process exit code.
-/// `check` and `fix` look for the engine, and `collect` for the container
+/// `check`, `fix`, `transform` and `local` look for `sloptopop-local`, and
+/// `collect` for the container
 /// runtime and its settings, in this process's environment.
 pub fn run(
     args: &[OsString],
@@ -47,8 +49,9 @@ pub fn run_with(
         Err(message) => return usage_error(stderr, &message),
     };
     let written = match command {
-        Command::Check(path, format) => return check(locator, &path, format, stdout, stderr),
-        Command::Fix(path, apply) => return fix(locator, &path, apply, stdout, stderr),
+        Command::Check(options) => return check(locator, &options, stdin, stdout, stderr),
+        Command::Fix(options) => return fix(locator, &options, stdin, stdout, stderr),
+        Command::Local(passed) => return local(locator, &passed, stdout, stderr),
         Command::Transform(options) => return transform(locator, &options, stdin, stdout, stderr),
         Command::Collect(options) => {
             return collect(&options, locator, stdout, stderr)

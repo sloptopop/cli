@@ -1,4 +1,4 @@
-//! Readable text for the Report that `sloptopop-engine check` prints.
+//! Readable text for the Report the sloptopop server answers to `check`.
 //!
 //! Only the public Report format is read; unknown fields are ignored and
 //! missing ones render as empty, so newer engines stay readable.

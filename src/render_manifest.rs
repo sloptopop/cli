@@ -1,6 +1,7 @@
 //! The upload manifest as text, shown before anything is sent (decision
-//! D-0174): where it goes, how many files and bytes, what is left out and
-//! why, how many secret values are masked.
+//! D-0174): where it goes, how many files and bytes, which analyzer
+//! reports go with them, what is left out and why, how many secret values
+//! are masked.
 //!
 //! Standards: SCF PRI-02 (notice before collection), PRI-05.
 
@@ -19,14 +20,29 @@ pub(crate) fn manifest(manifest: &Value, url: &str) -> String {
     } else {
         ""
     };
+    let mode = text(manifest, "mode");
+    let who = if mode.is_empty() {
+        "sloptopop".to_owned()
+    } else {
+        format!("sloptopop {mode}")
+    };
+    let reports = &field(manifest, "reports");
     let _head = writeln!(
         out,
-        "sloptopop transform will upload to {url}:\n  {} files, {} bytes of text (request: {} bytes), the Report ({} findings){context}",
+        "{who} will upload to {url}:\n  {} files, {} bytes of text (request: {} bytes), {} analyzer report(s){context}",
         number(manifest, "files"),
         number(manifest, "bytes"),
         number(manifest, "requestBytes"),
-        number(manifest, "findings"),
+        list(reports, "sent").len(),
     );
+    for left in list(reports, "left") {
+        let _left = writeln!(
+            out,
+            "  analyzer report not uploaded: {} ({})",
+            text(left, "name"),
+            text(left, "reason")
+        );
+    }
     let masked = &field(manifest, "masked");
     let files: Vec<&str> = list(masked, "files")
         .iter()

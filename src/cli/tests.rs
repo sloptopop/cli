@@ -5,7 +5,7 @@ use serde_json::Value;
 use super::*;
 use crate::engine_run::{ENGINE_ERROR, NOT_FOUND};
 use crate::render_report;
-use crate::tests::support::{FAKE_ENGINE, explicit};
+use crate::tests::support::{FAKE_LOCAL, TempDir, explicit, fake_local};
 
 struct Output {
     code: u8,
@@ -144,91 +144,123 @@ fn run_engine(locator: &Locator, args: &[&str]) -> Output {
     }
 }
 
-fn fake() -> Locator {
-    explicit(std::path::Path::new(FAKE_ENGINE))
+/// A repository directory named `name` (its name picks the fake's
+/// behaviour), in `dir`.
+fn repo(dir: &TempDir, name: &str) -> String {
+    let path = dir.0.join(name);
+    std::fs::create_dir_all(&path).unwrap();
+    path.to_string_lossy().into_owned()
+}
+
+/// `sloptopop <command> <root> <rest> --backend http://ok.test --yes`
+/// with the fake `sloptopop-local` and the fake curl.
+fn served(command: &str, root: &str, rest: &[&str]) -> Output {
+    let mut args = vec![command, root];
+    args.extend_from_slice(rest);
+    args.extend(["--backend", "http://ok.test", "--yes"]);
+    run_engine(&fake_local(), &args)
 }
 
 #[test]
 fn check_passes_json_through_unchanged() {
-    let out = run_engine(&fake(), &["check", "fail", "--format", "json"]);
-    assert_eq!(out.code, 1, "engine exit code");
+    let dir = TempDir::new();
+    let out = served("check", &repo(&dir, "fail"), &["--format", "json"]);
+    assert_eq!(out.code, 1, "exit code: {}", out.stderr);
     let report: Value = serde_json::from_str(&out.stdout).unwrap();
-    assert_eq!(report["passed"], false, "the engine's document");
+    assert_eq!(report["passed"], false, "the server's Report");
+    assert!(out.stdout.ends_with("}\n"), "verbatim");
     assert!(
-        out.stdout.ends_with("}\n"),
-        "verbatim, with the engine's newline"
+        out.stderr.contains(" --mode check\n"),
+        "the mode: {}",
+        out.stderr
     );
-    let passed = run_engine(&fake(), &["check", "pass", "--format", "json"]);
+    assert!(
+        out.stderr.contains("fake-local: report "),
+        "then the Report: {}",
+        out.stderr
+    );
+    let passed = served("check", &repo(&dir, "pass"), &["--format", "json"]);
     assert_eq!(passed.code, 0, "passed exit code");
 }
 
 #[test]
 fn check_renders_text_by_default() {
-    let out = run_engine(&fake(), &["check", "fail"]);
-    assert_eq!(out.code, 1, "engine exit code; stderr: {}", out.stderr);
-    assert!(
-        out.stderr.starts_with("fake-engine: check fail\n"),
-        "path passed to the engine"
-    );
-    let json = run_engine(&fake(), &["check", "fail", "--format", "json"]);
+    let dir = TempDir::new();
+    let root = repo(&dir, "fail");
+    let out = served("check", &root, &[]);
+    assert_eq!(out.code, 1, "exit code; stderr: {}", out.stderr);
+    let json = served("check", &root, &["--format", "json"]);
     assert_eq!(
         out.stdout,
         render_report::report(&serde_json::from_str(&json.stdout).unwrap()),
         "text"
     );
+    assert!(
+        out.stderr
+            .contains("sloptopop check will upload to http://ok.test/v1/transform:"),
+        "the manifest first: {}",
+        out.stderr
+    );
 }
 
 #[test]
-fn fix_passes_apply_and_renders() {
-    let applied = run_engine(&fake(), &["fix", "fail", "--apply"]);
+fn fix_passes_apply_and_prints_the_summary() {
+    let dir = TempDir::new();
+    let root = repo(&dir, "plain");
+    let applied = served("fix", &root, &["--apply"]);
+    assert!(applied.stderr.contains(" --mode fix\n"), "the mode");
     assert!(
-        applied
-            .stderr
-            .starts_with("fake-engine: fix fail --apply\n"),
-        "--apply passed to the engine"
+        applied.stderr.contains("fake-local: apply ") && applied.stderr.contains(" --apply\n"),
+        "--apply passed on: {}",
+        applied.stderr
     );
     assert_eq!(
         (applied.code, applied.stdout.as_str()),
-        (
-            0,
-            "sloptopop fix: applied\n  created  rust-toolchain.toml  (template rust-toolchain)\n"
-        ),
-        "apply"
+        (0, "# summary of 0123456789abcdef\n"),
+        "the summary"
     );
-    let dry = run_engine(&fake(), &["fix", "pass"]);
-    assert_eq!(
-        (dry.code, dry.stdout.as_str()),
-        (
-            0,
-            "sloptopop fix: dry run, nothing written\n  nothing to fix\n"
-        ),
-        "dry run"
+    let dry = served("fix", &repo(&dir, "nosummary"), &[]);
+    assert_eq!(dry.code, 1, "a dry run is not complete in the fake");
+    assert!(
+        dry.stdout
+            .starts_with("{\"schemaVersion\":2,\"args\":\"apply "),
+        "report.json without a summary: {}",
+        dry.stdout
     );
 }
 
 #[test]
-fn engine_problems_exit_3() {
-    for args in [&["check", "garbage"][..], &["fix", "garbage"]] {
-        let out = run_engine(&fake(), args);
-        assert_eq!(out.code, ENGINE_ERROR, "{args:?}");
-        assert!(out.stdout.is_empty(), "{args:?} stdout");
+fn local_problems_exit_3() {
+    let dir = TempDir::new();
+    for command in ["check", "fix"] {
+        let garbage = served(command, &repo(&dir, "garbage"), &[]);
+        assert_eq!(garbage.code, ENGINE_ERROR, "{command}");
+        assert!(garbage.stdout.is_empty(), "{command} stdout");
         assert!(
-            out.stderr
-                .contains("\nerror: sloptopop-engine printed invalid JSON: "),
-            "{args:?}: {}",
-            out.stderr
+            garbage
+                .stderr
+                .contains("error: sloptopop-local printed invalid JSON: "),
+            "{command}: {}",
+            garbage.stderr
+        );
+        let broken = served(command, &repo(&dir, "broken"), &[]);
+        assert_eq!(broken.code, ENGINE_ERROR, "{command}");
+        assert!(
+            broken.stderr.contains("error: sloptopop-local failed"),
+            "{command}: {}",
+            broken.stderr
         );
     }
-    for args in [&["check", "broken"][..], &["fix", "broken", "--apply"]] {
-        let out = run_engine(&fake(), args);
-        assert_eq!(out.code, ENGINE_ERROR, "{args:?}");
-        assert!(
-            out.stderr
-                .contains("\nerror: boom\nerror: sloptopop-engine failed"),
-            "{args:?}: {}",
-            out.stderr
-        );
-    }
+    let failing = served("fix", &repo(&dir, "failing"), &[]);
+    assert_eq!(failing.code, ENGINE_ERROR, "apply fails");
+    let bad_report = served("check", &repo(&dir, "badreport"), &[]);
+    assert!(
+        bad_report.code == ENGINE_ERROR && bad_report.stderr.contains("printed invalid JSON"),
+        "a Report that is not JSON: {}",
+        bad_report.stderr
+    );
+    let bad_answer = served("check", &repo(&dir, "badanswer"), &["--format", "json"]);
+    assert_eq!(bad_answer.code, ENGINE_ERROR, "report fails");
     let missing = run_engine(&Locator::default(), &["check"]);
     assert_eq!(
         (missing.code, missing.stderr.as_str()),
@@ -238,15 +270,42 @@ fn engine_problems_exit_3() {
 }
 
 #[test]
-fn broken_stdout_during_check_exits_3() {
-    let mut err = Vec::new();
-    let code = super::run_with(
-        &[OsString::from("check"), OsString::from("pass")],
-        &fake(),
-        &mut &b""[..],
-        &mut Broken,
-        &mut err,
+fn check_without_a_server_says_how_to_get_one() {
+    let dir = TempDir::new();
+    let out = run_engine(
+        &fake_local(),
+        &[
+            "check",
+            &repo(&dir, "pass"),
+            "--backend",
+            "http://down.test",
+            "--yes",
+        ],
     );
+    assert_eq!(out.code, 4, "no server: no check");
+    assert!(
+        out.stderr.contains("hint: sloptopop detects only on its server: use the hosted service (https://api.sloptopop.dev, the default) or your self-hosted sloptopop-engine with --backend <url>"),
+        "{}",
+        out.stderr
+    );
+}
+
+#[test]
+fn broken_stdout_during_check_exits_3() {
+    let dir = TempDir::new();
+    let root = repo(&dir, "pass");
+    let mut err = Vec::new();
+    let args: Vec<OsString> = [
+        "check",
+        root.as_str(),
+        "--backend",
+        "http://ok.test",
+        "--yes",
+    ]
+    .iter()
+    .map(OsString::from)
+    .collect();
+    let code = super::run_with(&args, &fake_local(), &mut &b""[..], &mut Broken, &mut err);
     assert_eq!(code, ENGINE_ERROR, "write failure");
     assert!(
         String::from_utf8_lossy(&err).contains("\nerror: cannot write output: "),
@@ -255,8 +314,26 @@ fn broken_stdout_during_check_exits_3() {
 }
 
 #[test]
+fn local_runs_sloptopop_local_with_the_arguments() {
+    let out = run_engine(
+        &explicit(std::path::Path::new(FAKE_LOCAL)),
+        &["local", "version"],
+    );
+    assert_eq!(
+        (out.code, out.stdout.as_str()),
+        (0, "sloptopop-local 0.1.0\n"),
+        "passed through"
+    );
+    let other = run_engine(
+        &explicit(std::path::Path::new(FAKE_LOCAL)),
+        &["local", "other"],
+    );
+    assert_eq!(other.code, 2, "its exit code");
+}
+
+#[test]
 fn collect_is_dispatched_with_the_locator_settings() {
-    let root = crate::tests::support::TempDir::new();
+    let root = TempDir::new();
     let locator = Locator {
         path: Some(crate::tests::support::fake_tools("findings").into_os_string()),
         vars: vec![("SLOPTOPOP_REGISTRY".to_owned(), "reg.example".into())],

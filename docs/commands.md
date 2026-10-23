@@ -1,15 +1,24 @@
 # Commands
 
-Every command and option of `sloptopop`, and of the `sloptopop-engine`
-binary it starts. The grammar is strict: anything not listed here is a
-usage error (exit code 2).
+Every command and option of `sloptopop`, and of the open-source
+`sloptopop-local` binary it starts. The grammar is strict: anything not
+listed here is a usage error (exit code 2).
+
+sloptopop detects only on its server, `sloptopop-engine`: the hosted
+service, or the same image self-hosted (`--backend <url>`). There is no
+offline check. `check`, `fix` and `transform` all go the same way: run
+[`collect`](#collect) first (its gitleaks report is what masks your
+secrets), then each command prepares the masked snapshot with
+`sloptopop-local`, shows what it uploads and asks, posts it, and prints or
+applies the server's answer.
 
 ```
-sloptopop check [path] [--format text|json]
-sloptopop fix [path] [--apply]
+sloptopop check [path] [--format text|json] [--backend <url>] [--yes]
+sloptopop fix [path] [--apply] [--backend <url>] [--yes]
 sloptopop collect [root] [--only <tool,...>] [--rules <dir>] [--dry-run] [--offline] …
 sloptopop transform [root] [--apply] [--branch <name>] [--backend <url>] [--yes]
                     [--confirm <id,...> --by <name>] [--format text|json]   (preview)
+sloptopop local <arguments>
 sloptopop serve --stdio
 sloptopop schema
 sloptopop version | --version | -V
@@ -26,46 +35,59 @@ with `-`.
 | 0 | Success. For `check`: the repository passed. For `transform`: every automated step was applied (with `--apply`) or can be (dry run). |
 | 1 | For `check`: the repository did not pass. For `transform`: a step is waiting for a confirmation, was refused, or is blocked by one that was. For `collect`: it could not write the reports directory, the rule pack, `.collect.json` or its output. For `serve`: the session ended without `shutdown`, or a framing error. |
 | 2 | Usage error: an unknown command or option, a missing value, an unknown format or tool, a root or rules directory that does not exist. The message and the usage text go to stderr. |
-| 3 | `collect`: no container runtime answered (nothing ran). `check`, `fix` and `transform`: the engine is missing, could not be started, failed, or printed something that is not JSON. For `transform` this includes the engine refusing to start: not the top of a git repository, uncommitted or untracked changes, `HEAD` moved since the request, a branch that exists, a confirmation that is not allowed. |
-| 4 | `transform`: the upload was not confirmed, `curl` is not on `PATH`, or the backend could not be reached or refused the request. |
+| 3 | `collect`: no container runtime answered (nothing ran). `check`, `fix`, `transform` and `local`: `sloptopop-local` is missing, could not be started, failed, or printed something that is not JSON. This includes it refusing: not the top of a git repository, uncommitted or untracked changes, no usable gitleaks report (run `collect`), `HEAD` moved since the request, a branch that exists, a confirmation that is not allowed. |
+| 4 | `check`, `fix`, `transform`: the upload was not confirmed, `curl` is not on `PATH`, or no server answered or it refused the request (the message names the hosted service and the self-hosted option). |
 
 ## `check`
 
 ```
-sloptopop check [path] [--format text|json]
+sloptopop check [path] [--format text|json] [--backend <url>] [--yes]
 ```
 
-Checks the repository at `path` and prints the result.
+Checks the repository at `path` on the sloptopop server and prints the
+server's [Report](report-format.md).
 
-- It starts `sloptopop-engine check <path>` and reads the
-  [Report](report-format.md) it prints.
-- The engine also reads the analyzer reports in `.sloptopop/reports/`, if
-  there are any (see [`collect`](#collect)).
-- It changes nothing in the repository.
+1. `sloptopop-local request <path> --mode check` takes the files of the
+   commit `HEAD` points to (the tree must be clean), masks every secret
+   value the gitleaks report in `.sloptopop/reports/` names (it refuses
+   without a usable one: run `sloptopop collect`), and writes the request
+   with the analyzer reports `collect` wrote.
+2. It shows what it will upload and asks (`--yes` skips the question), and
+   posts it to `<backend>/v1/transform` with `curl`.
+3. The server checks that no secret arrived in the clear, re-runs the
+   analyzers it can from the same pinned images, runs its Detector and
+   answers the Report v2. `sloptopop-local report` prints it.
+
+It changes nothing in the repository.
 
 | Option | Meaning |
 |---|---|
 | `--format text` | The default. A summary: the verdict, the findings grouped by severity (each with its message, its control, its mechanical fix if any, and how to fix it), then every control with its status. |
-| `--format json` | The engine's Report, unchanged. See [report-format.md](report-format.md). |
+| `--format json` | The server's Report, unchanged. See [report-format.md](report-format.md). |
+| `--backend <url>` | The server (default the hosted `https://api.sloptopop.dev`); your self-hosted `sloptopop-engine` otherwise. |
+| `--yes` | Upload without asking. |
 
-Exit code: 0 if the repository passed, 1 if not, 3 if the engine failed.
-The profile is `strict`, so every finding fails the repository. The rules
-are listed in [rules.md](rules.md).
+Exit code: 0 if the repository passed, 1 if not, 3 if `sloptopop-local`
+failed, 4 if nothing was uploaded or no server answered. The profile is
+`strict`, so every finding fails the repository. The rules are listed in
+[rules.md](rules.md).
 
 ## `fix`
 
 ```
-sloptopop fix [path] [--apply]
+sloptopop fix [path] [--apply] [--backend <url>] [--yes]
 ```
 
 Creates missing files from templates: the mechanical fixes some findings
-carry (see [rules.md](rules.md)).
+carry (see [rules.md](rules.md)). The server detects and returns one step
+per missing file; `sloptopop-local apply` checks each against the server's
+digests.
 
 - Without `--apply` it is a dry run. It lists the files it would create
   and writes nothing.
-- With `--apply` it creates them.
-- It never overwrites or edits a file that already exists. Such a file is
-  listed as `exists`.
+- With `--apply` it commits each file as one commit on a new branch
+  (`sloptopop/transform-<run>`); the checkout is never touched.
+- It never overwrites or edits a file that already exists.
 
 The templates today:
 
@@ -79,10 +101,28 @@ The templates today:
 The hook and the workflow run `scripts/gate.sh`. You write that script
 yourself: it is your project's quality gate.
 
-Output, one line per file: `planned` (dry run), `created` (with
-`--apply`) or `exists` (left alone). Exit code 0, or 3 if the engine
-failed. The JSON the engine prints is described in
-[report-format.md](report-format.md#fix-result).
+It prints the run's `SUMMARY.md`. Exit code 0 when every fix was
+delivered (or, in a dry run, can be), 1 when not, 3 or 4 as for `check`.
+
+## `local`
+
+```
+sloptopop local <arguments>
+```
+
+Runs `sloptopop-local` with the arguments as they are, for what the other
+commands do not cover, such as the evidence of your project's own checks
+after a transform:
+
+```
+sloptopop local evidence . --run <id>
+```
+
+It runs your type check, build and tests on the base commit and on the
+applied branch (from `.sloptopop/checks.json`, or what `package.json`,
+Cargo or Go declare) and writes the evidence request; only exit codes,
+durations and output digests go to the server, whose Guider says whether
+the delivered steps keep your checks passing.
 
 ## `collect`
 
@@ -122,7 +162,7 @@ language is in [analyzers.md](analyzers.md).
 
 > **Preview.** `transform` works end to end and is tested, but names,
 > options and file layouts can still change before release, and the
-> hosted backend is not open yet (use `--backend` with a backend you run).
+> hosted server is not open yet (use `--backend` with a server you run).
 
 ```
 sloptopop transform [root] [--apply] [--branch <name>] [--backend <url>] [--yes]
@@ -136,38 +176,37 @@ writes a report. The transformations are listed in
 
 What it does, in order:
 
-1. **Prepare.** `sloptopop-engine transform-request` checks that `root` is
-   the top of a git repository with a clean tree, runs the Detector (it
-   also reads analyzer reports in `.sloptopop/reports/`), takes the files
-   of the commit `HEAD` points to, masks secret values, and writes the
-   request to `.sloptopop/transform/<run>/request.json`.
-2. **Filter.** The CLI removes files without a recognized source-code
-   extension, updates the request digest and run directory, and records
-   those paths in the exclusion manifest. The filtered request is the one
-   both uploaded and later checked by the engine.
-3. **Show and ask.** It prints what it will upload and where to stderr
-   (the upload manifest: files, bytes, files left out and why, secret
-   values masked) and asks `Upload? [y/N]`. `--yes` uploads without asking
-   (for CI). Without a yes, nothing is sent (exit code 4).
-4. **Upload.** It posts the request to `<backend>/v1/transform` with
-   `curl`, the only network call sloptopop makes. The backend describes
-   the code, plans, and verifies every automated step on the snapshot.
-5. **Deliver.** `sloptopop-engine transform` checks that the answer
-   belongs to the request and to `HEAD`, lowers each verified step again
-   on this machine (the Guider checks it here too, and the step is used
-   only if its bytes are exactly the ones the backend verified), and with
+1. **Prepare.** `sloptopop-local request <root> --mode transform` checks
+   that `root` is the top of a git repository with a clean tree, takes
+   the files of the commit `HEAD` points to, masks every secret value the
+   gitleaks report names (it refuses without a usable one), and writes the
+   request, with the analyzer reports, to
+   `.sloptopop/transform/<run>/request.json`.
+2. **Show and ask.** It prints what it will upload and where to stderr
+   (the upload manifest: files, bytes, analyzer reports, files left out
+   and why, secret values masked) and asks `Upload? [y/N]`. `--yes`
+   uploads without asking (for CI). Without a yes, nothing is sent (exit
+   code 4).
+3. **Upload.** It posts the request to `<backend>/v1/transform` with
+   `curl`, the only network call sloptopop makes. The server checks that no
+   secret arrived in the clear, detects, describes the code, plans, and
+   verifies every automated step on the snapshot.
+4. **Deliver.** `sloptopop-local apply` checks that the answer belongs to
+   the request and to `HEAD`, checks every change against the server's
+   whole-file digests (a step is used only if its bytes are exactly the
+   ones the server verified), puts your real secret values back, and with
    `--apply` commits it: one commit per step, on top of the previous one,
-   on a new branch. Then it runs the Detector again on the result.
-6. **Report.** It writes `report.json`, `SUMMARY.md` and `PR.md` to
-   `.sloptopop/transform/<run>/` and prints `SUMMARY.md` (or, with
-   `--format json`, `report.json`).
+   on a new branch.
+5. **Report.** It writes `report.json`, `SUMMARY.md` and `PR.md` to
+   `.sloptopop/transform/<run>/` (with the server's re-detection) and
+   prints `SUMMARY.md` (or, with `--format json`, `report.json`).
 
 | Option | Meaning |
 |---|---|
 | (none) | Dry run: plans and checks every step, commits nothing. |
 | `--apply` | Commits the delivered steps on a new branch. |
 | `--branch <name>` | The branch to create (default `sloptopop/transform-<run>`). It must not exist. |
-| `--backend <url>` | The backend's base URL (default `https://api.sloptopop.dev`, not open yet). `http://` is accepted for a backend inside your own network. |
+| `--backend <url>` | The server's base URL (default `https://api.sloptopop.dev`, not open yet). `http://` is accepted for a server inside your own network. |
 | `--yes` | Upload without asking. |
 | `--confirm <id,...>` | Confirm these declared behaviour changes (`att-1,att-2`, as `SUMMARY.md` lists them) before delivering. Repeatable. Needs `--by`. |
 | `--by <name>` | Who confirms. The name must be listed in `.sloptopop/context.json` (see below). |
@@ -231,20 +270,17 @@ is committed or makes your tree dirty.
 | `<run>/PR.md` | A ready pull-request description for the branch. |
 | `attestations.json` | The confirmations you recorded. |
 
-`report.json` (schema version 1):
+`report.json` (schema version 2, written by `sloptopop-local`):
 
 | Member | Content |
 |---|---|
-| `schemaVersion`, `tool` | `1`; `{name, version}` |
-| `run`, `mode`, `base` | the run id, `apply` or `dry-run`, the base commit |
+| `schemaVersion`, `tool` | `2`; `{name, version}` (`sloptopop-local`) |
+| `run`, `plan`, `base` | the run id, the plan id, the base commit |
+| `applied` | whether the steps were committed (`--apply`) or only checked (dry run) |
 | `branch`, `head` | the branch made and its last commit, or `null` |
-| `plan` | `{id, steps, rounds, birAfter}` |
-| `steps[]` | `{ordinal, kind, class, status, commit, files, reason, problems, attestations[] {id, text, who, confirmedBy}, manual[] {text, checklist}}`; `status` is `applied`, `planned` (dry run), `manual`, `pending` (waits for a confirmation), `refused` or `blocked` |
-| `problems[]` | `{id, goal, control, trace, method, findings[] {rule, path, line}, step, status, redetection}`; `redetection` is `resolved`, `still detected`, `not applied` or `not re-checked` |
-| `refused[]` | problems the backend refused and planned without: `{round, step, problems, findings, reason}` |
-| `pending[]` | confirmations still needed: `{attestation, step, text, who}` |
-| `redetection` | `{before, after, notRechecked, changes[] {rule, path, before, after}}` or `null`: the Detector's own findings on uploaded files, before and after; analyzer findings are counted in `notRechecked` (run `sloptopop collect` again) |
-| `summary` | how many steps ended in each status |
+| `complete` | whether no step is pending, refused or blocked |
+| `steps[]` | `{ordinal, kind, class, title, status, commit, files, reason}`; `status` is `applied`, `planned` (dry run), `manual`, `pending` (waits for a confirmation), `refused` or `blocked` |
+| `redetected` | the server's re-detection, `{rules[] {rule, before, after}}` (the rules whose counts differ, the Detector's own rules only), or `null` |
 
 ## `serve`
 
@@ -276,8 +312,8 @@ text and exit 0.
 
 | Variable | Used by | Meaning |
 |---|---|---|
-| `SLOPTOPOP_ENGINE` | `check`, `fix`, `transform` | Full path of the `sloptopop-engine` binary. When set and not empty, it is used as given. |
-| `PATH` | `check`, `fix`, `transform`, `collect` | Searched for `sloptopop-engine` (after the directory of `sloptopop`), by `transform` for `curl`, by `collect` for `docker` and `podman` (and, under `--host-tools`, the analyzers). |
+| `SLOPTOPOP_LOCAL` | `check`, `fix`, `transform`, `local` | Full path of the `sloptopop-local` binary. When set and not empty, it is used as given. |
+| `PATH` | `check`, `fix`, `transform`, `local`, `collect` | Searched for `sloptopop-local` (after the directory of `sloptopop`), for `curl`, by `collect` for `docker` and `podman` (and, under `--host-tools`, the analyzers). |
 | `SLOPTOPOP_REGISTRY` | `collect` | The registry the analyzer images and vulnerability snapshots are pulled from (default `components.sloptopop.dev`); `--registry` wins. |
 | `SLOPTOPOP_CONTAINER_RUNTIME` | `collect` | `docker` or `podman`: the only runtime to use; `--runtime` wins. |
 | `SLOPTOPOP_COLLECT_MEMORY`, `SLOPTOPOP_COLLECT_CPUS` | `collect` | Each tool's memory limit (default `4g`) and an optional CPU cap. |
@@ -285,28 +321,27 @@ text and exit 0.
 | `GOPROXY`, `GOPRIVATE`, `GONOPROXY`, `GONOSUMDB`, `GONOSUMCHECK`, `GOINSECURE` | `collect` | Passed to the `go mod download` prepare step of Go projects. |
 | `SLOPTOPOP_BIN` | language libraries | Path of the `sloptopop` binary a library starts (see [PROTOCOL.md](../PROTOCOL.md)). |
 
-## The engine: `sloptopop-engine`
+## `sloptopop-local`
 
-You do not normally run the engine yourself. `sloptopop` starts it with
-these arguments and reads the JSON it prints on stdout.
+You do not normally run `sloptopop-local` yourself (see [`local`](#local)).
+`sloptopop` starts it with these arguments and reads the JSON it prints on
+stdout. It is open source (MIT OR Apache-2.0) and holds no detection logic.
 
 ```
-sloptopop-engine check <path> [--profile strict]
-sloptopop-engine fix <path> [--apply]
-sloptopop-engine transform-request <root>                                          (preview)
-sloptopop-engine transform <root> --run <id> [--apply] [--branch <name>]
-                           [--confirm <id,...> --by <name>]                        (preview)
+sloptopop-local request <root> --mode check|fix|transform
+sloptopop-local report <root> --run <id>
+sloptopop-local apply <root> --run <id> [--apply] [--branch <name>] [--confirm <id,...> --by <name>]
+sloptopop-local evidence <root> --run <id>
+sloptopop-local version
 ```
 
 | Command | Prints | Exit code |
 |---|---|---|
-| `check <path>` | The [Report](report-format.md). `--profile` takes only `strict`, the default. | 0 passed, 1 not passed |
-| `fix <path>` | The [fix result](report-format.md#fix-result). A dry run unless `--apply`. | 0 |
-| `transform-request <root>` | `{schemaVersion, run, base, request, response, manifest}`: the run, the request and response paths (relative to the root), the upload manifest. | 0 |
-| `transform <root> --run <id>` | `report.json`. | 0 every automated step delivered, 1 not |
+| `request` | `{schemaVersion, run, base, request, response, manifest}`: the run, the request and response paths (relative to the root), the upload manifest. | 0 |
+| `report` | The server's [Report](report-format.md). | 0 passed, 1 not passed |
+| `apply` | `report.json`. | 0 every automated step delivered, 1 not |
+| `evidence` | `{schemaVersion, run, base, request, response, checks}`: the evidence request and response paths. | 0 |
 
-The engine has no network code: `sloptopop transform` posts the request
-the engine wrote and saves the answer where the engine reads it.
-
-The path is required and may not start with `-`. A usage error exits 2.
-Any other failure exits 3 with `error: …` on stderr.
+It has no network code: `sloptopop` posts the request it wrote and saves
+the answer where it reads it. A usage error exits 2. Any other failure
+exits 3 with `error: …` on stderr.

@@ -127,25 +127,22 @@ overwrites or edits an existing one. Without `--apply` it writes nothing.
 
 | Command | What it sends to sloptopop |
 |---|---|
-| `check`, `fix` | Nothing. The engine runs locally. |
+| `check`, `fix` | One request to the server you name (hosted by default): the text files of the commit `HEAD` points to with every secret value masked, the analyzer reports in `.sloptopop/reports/`, and `.sloptopop/context.json` if you have one. The Report (`check`) or the fixes (`fix`) come back. |
 | `collect` | Nothing about your code. It fetches the analyzer images and the daily vulnerability snapshots from sloptopop's component library (or your mirror), each announced before it is fetched; no analyzer has network. For Go and .NET projects, a prepare step downloads your project's own dependencies from your module or package registries. See [collect.md](collect.md#how-a-tool-runs). |
-| `transform` (preview) | One request to the backend you name: the Report, the text files of the commit `HEAD` points to with secret values masked, and `.sloptopop/context.json` if you have one. The plan and the verification results come back. |
+| `transform` (preview) | The same request: the server detects, plans and verifies; the Report, the plan and the verified changes come back. |
 
 What `transform` uploads, exactly:
 
-- the files of the commit, read from git: UTF-8 source-code text files with
-  these extensions (case-insensitive), at most 1 MiB each: `.c`, `.cc`,
-  `.cjs`, `.cpp`, `.cs`, `.cts`, `.cxx`, `.go`, `.h`, `.hpp`, `.java`,
-  `.js`, `.jsx`, `.kt`, `.kts`, `.mjs`, `.mts`, `.php`, `.ps1`, `.psm1`,
-  `.py`, `.rb`, `.rs`, `.scala`, `.sql`, `.swift`, `.ts` and `.tsx`;
-- never: files without one of those code extensions, binary files,
-  symbolic links, submodules, `node_modules`,
+- the files of the commit, read from git: UTF-8 text files only, at most
+  1 MiB each;
+- never: binary files, symbolic links, submodules, `node_modules`,
   `dist`, `build`, `vendor` and other dependency or build directories,
   `.sloptopop/`, and real environment files (`.env`, `.env.local`, …;
-  `.env.example` is not uploaded because it is not a source-code file);
-- secret values masked: on every line where the Detector (or an analyzer
-  report in `.sloptopop/reports/`) found a committed secret, each
-  value-like token is replaced by `x`s of the same length before upload.
+  `.env.example` is uploaded);
+- secret values masked: every span the gitleaks report in
+  `.sloptopop/reports/` names (in any file), and every value-like token
+  on its line, is replaced by `x`s of the same length before upload;
+  without a usable, fresh gitleaks report nothing is uploaded.
   A documented public prefix (`sk_live_`, `ghp_`, `AKIA`, …) is kept, so
   the provider is still known. The real value is put back on your
   machine in the commits;
@@ -160,12 +157,17 @@ sent, so you can check it.
 The request goes over `https` with the system's `curl` (`http` only if
 you name an `http://` backend, for one inside your own network). The
 `sloptopop` CLI is the only program that makes the call, and it is open
-source; the engine has no network code. Neither sends usage data or
-checks for updates.
+source; `sloptopop-local` has no network code. Neither sends usage data
+or checks for updates.
 
-`transform` needs the backend because describing and planning the code
-happens there. Projects that upload nothing still get `check`, `fix`,
-`collect` and the mechanical fixes.
+`check`, `fix` and `transform` all need the server: since decision
+D-0183 detection, planning and verification run only there, and nothing
+proprietary runs on your machine. Only `collect` (the open-source
+analyzers) works without an upload. Before anything is sent, every secret
+value gitleaks reports is masked (`sloptopop-local` refuses to upload
+without a usable gitleaks report), and the server scans what it receives
+with the same pinned gitleaks and refuses a request that still holds a
+secret in the clear, naming only the file and line.
 
 The backend keeps nothing of a request after it: the snapshot exists only
 in a private scratch directory while the request runs. Its logs hold
@@ -176,7 +178,7 @@ D-0172 to D-0181):
 
 - where the hosted backend runs (provider and region) and the
   data-processing terms;
-- the licence terms of the engine and the backend.
+- the licence terms of the self-hosted server and the hosted service.
 
 This page will be updated when these are decided. The `sloptopop` CLI is
 open source (MIT OR Apache-2.0), so you can read its code.

@@ -7,7 +7,7 @@ them, where a fix can be verified.
 
 | Document | What it covers |
 |---|---|
-| [Install](install.md) | Installing `sloptopop` and `sloptopop-engine`, and checking the installation |
+| [Install](install.md) | Installing `sloptopop` and `sloptopop-local`, and checking the installation |
 | [Quickstart](quickstart.md) | `check`, `collect`, `fix` and `transform` on a small sample repository |
 | [Commands](commands.md) | Every command, option, exit code and environment variable |
 | [Rules](rules.md) | Every rule `check` reports: what it means, why it matters, its controls and what to do |
@@ -26,7 +26,7 @@ that language.
 
 | Document | What it covers |
 |---|---|
-| [Architecture](architecture.md) | How the CLI, the engine and the language libraries fit together |
+| [Architecture](architecture.md) | How the CLI, `sloptopop-local`, the server and the language libraries fit together |
 | [Protocol](../PROTOCOL.md) | JSON-RPC 2.0 over stdio between the libraries and the `sloptopop` binary |
 | [Protocol schema](../schema/protocol.json) | Machine-readable description of every method and type |
 | [Conformance suite](../conformance/README.md) | Wire-level test cases every library must pass |
