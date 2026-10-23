@@ -1,13 +1,13 @@
 //! Converting the output of analyzers that write no SARIF (`OpenSSF`
 //! Scorecard, `PHP_CodeSniffer`, Pylint, dependency-cruiser, clang-tidy,
-//! Cppcheck), or
+//! Cppcheck, `ShellCheck`, rustc and Clippy), or
 //! whose fixes only another format carries (Ruff, `ESLint`, Biome, Opengrep
 //! and Semgrep), into SARIF 2.1.0, which is all the engine reads. The
 //! conversion keeps each tool's own rule id and message, maps its severity
 //! to a SARIF level, makes paths relative to the repository root, keeps the
 //! tool's own fixes in the byte-region carrier ([`fix`]), and is
 //! deterministic: results sorted, duplicates dropped, nothing time- or
-//! machine-dependent. For the C and C++ analyzers it keeps only the rules
+//! machine-dependent. For the C, C++ and shell analyzers it keeps only the rules
 //! the catalogue lists as reported, tags each with its defect class
 //! ([`defect`]), and records how the files were compiled: without the
 //! project's compile database, every result is marked lower confidence.
@@ -20,6 +20,10 @@ mod defect;
 mod fix;
 mod native;
 mod reviewed;
+mod rustc;
+mod shellcheck;
+mod tidy;
+mod yaml;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -47,7 +51,8 @@ pub(crate) enum Converter {
     /// dependency-cruiser's JSON: each rule violation.
     Depcruise,
     /// clang-tidy's diagnostics (`file:line:col: level: message [check]`)
-    /// of the reported checks in the list.
+    /// of the reported checks in the list, with the fixes it exported for
+    /// the reviewed ones.
     ClangTidy(&'static [Rule]),
     /// Cppcheck's XML version 2 report: the errors of the reported ids in
     /// the list.
@@ -61,6 +66,12 @@ pub(crate) enum Converter {
     BiomeRdjson,
     /// Opengrep's or Semgrep's JSON: results with their rule's fix.
     SemgrepJson,
+    /// `ShellCheck`'s `json1` reports: the comments of the reported rules in
+    /// the list, with their fixes.
+    ShellcheckJson1(&'static [Rule]),
+    /// rustc's and Clippy's JSON diagnostics: findings with their
+    /// machine-applicable suggestions.
+    RustcJson,
 }
 
 /// One SARIF result, ordered for a deterministic report.
@@ -145,9 +156,10 @@ pub(crate) fn convert(
                 flags: Some(flags),
                 errors: &[],
             };
-            let (found, failed) = clang_tidy(body, rules);
+            let (diagnostics, exported) = tidy::split(body);
+            let (found, failed) = clang_tidy(diagnostics, rules);
             errors.extend(failed);
-            found
+            tidy::attach(found, exported, rules, &context, &mut store)
         }
         Converter::Cppcheck(rules) => {
             let (flags, body) = compile_flags(&text);
@@ -166,6 +178,11 @@ pub(crate) fn convert(
         Converter::EslintJson => native::eslint(&json()?, &context, &mut store)?,
         Converter::BiomeRdjson => native::biome(&json()?, &context, &mut store)?,
         Converter::SemgrepJson => native::semgrep(&json()?, &context, &mut store)?,
+        Converter::ShellcheckJson1(rules) => {
+            notes.rules = rules;
+            shellcheck::findings(&text, rules, &context, &mut store)?
+        }
+        Converter::RustcJson => rustc::findings(&text, &context, &mut store)?,
     };
     let notes = Notes {
         errors: &errors,
@@ -908,5 +925,7 @@ fn diagnostic(line: &str) -> Option<Finding> {
     })
 }
 
+#[cfg(test)]
+mod probe;
 #[cfg(test)]
 mod tests;

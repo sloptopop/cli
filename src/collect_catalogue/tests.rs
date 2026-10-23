@@ -71,6 +71,8 @@ fn the_required_tools_are_catalogued() {
         "detekt",
         "clang-tidy",
         "cppcheck",
+        "shellcheck",
+        "clippy",
         "cargo-llvm-cov",
         "coverage.py",
         "c8",
@@ -323,7 +325,14 @@ fn documented_entries_run_nowhere() {
     {
         assert_eq!(tool.prepare, None, "{}", tool.name);
         assert_eq!(tool.data, None, "{}", tool.name);
-        assert_eq!(tool.convert, None, "{}", tool.name);
+        // Clippy's entry names the converter for the JSON it prints when
+        // it is run elsewhere (LX-CAR-4); collect itself never runs it.
+        assert_eq!(
+            tool.convert,
+            (tool.name == "clippy").then_some((Converter::RustcJson, "clippy.json")),
+            "{}",
+            tool.name
+        );
     }
 }
 
@@ -521,10 +530,16 @@ fn the_defect_runs_keep_the_crown_jewel_rules_and_their_own_configuration() {
     );
 }
 
-/// The C and C++ analyzers report exactly their listed defect rules.
+/// The C and C++ analyzers and `ShellCheck` report exactly their listed
+/// defect rules.
 fn rules_of(name: &str) -> &'static [Rule] {
     match entry(name).convert {
-        Some((Converter::ClangTidy(rules) | Converter::Cppcheck(rules), _)) => rules,
+        Some((
+            Converter::ClangTidy(rules)
+            | Converter::Cppcheck(rules)
+            | Converter::ShellcheckJson1(rules),
+            _,
+        )) => rules,
         other => panic!("{name}: {other:?}"),
     }
 }
@@ -584,7 +599,8 @@ fn every_defect_rule_is_listed_once_with_its_reasons() {
             "pmd",
             "detekt",
             "clang-tidy",
-            "cppcheck"
+            "cppcheck",
+            "shellcheck"
         ]
     );
     for name in tagged {
@@ -628,9 +644,39 @@ fn every_defect_rule_is_listed_once_with_its_reasons() {
             .is_some_and(|why| why.starts_with("precision 1/19")),
         "listed, but below the precision budget"
     );
-    for name in ["clang-tidy", "cppcheck"] {
+    for name in ["clang-tidy", "cppcheck", "shellcheck"] {
         assert_eq!(entry(name).defects, rules_of(name), "{name}: one table");
     }
+}
+
+#[test]
+fn shellcheck_reports_its_codes_with_their_classes() {
+    for rule in rules_of("shellcheck") {
+        assert!(
+            rule.id
+                .strip_prefix("SC")
+                .is_some_and(|code| code.parse::<u16>().is_ok()),
+            "{}",
+            rule.id
+        );
+    }
+    let class = |id: &str| {
+        rules_of("shellcheck")
+            .iter()
+            .find(|rule| rule.id == id)
+            .map(|rule| rule.class)
+    };
+    assert_eq!(
+        ["SC2006", "SC2086", "SC2164"].map(class),
+        [Some(Defect::ShellExpansion); 3],
+        "the three rules with reviewed fixes are listed"
+    );
+    assert_eq!(
+        ["SC2006", "SC2086", "SC2164"]
+            .map(|id| Rule::reported(rules_of("shellcheck"), id).is_some()),
+        [false, false, true],
+        "only SC2164 is above the precision budget"
+    );
 }
 
 /// The ids of the rules of `rules`, in order.
@@ -693,6 +739,11 @@ fn scopes_follow_the_ecosystems() {
         );
         assert!(!entry(name).applies(&BTreeSet::new()), "{name}");
     }
+    let shell = BTreeSet::from([Ecosystem::Shell]);
+    assert!(entry("shellcheck").applies(&shell));
+    assert!(!entry("shellcheck").applies(&python));
+    assert!(entry("clippy").applies(&BTreeSet::from([Ecosystem::Rust])));
+    assert!(!entry("clippy").applies(&shell));
 }
 
 /// The whole catalogue, every field of every entry, as reviewed: a change
@@ -741,11 +792,27 @@ fn fix_carrying_tools_run_in_their_fix_carrying_format() {
         ),
         ("opengrep", Converter::SemgrepJson, &["scan", "--json"][..]),
         ("semgrep", Converter::SemgrepJson, &["scan", "--json"][..]),
+        // The wrappers ask for json1 and the exported fixes themselves.
+        (
+            "shellcheck",
+            Converter::ShellcheckJson1(defects::SHELLCHECK_RULES),
+            &[][..],
+        ),
+        (
+            "clang-tidy",
+            Converter::ClangTidy(defects::CLANG_TIDY_RULES),
+            &[][..],
+        ),
+        (
+            "clippy",
+            Converter::RustcJson,
+            &["clippy", "--message-format=json"][..],
+        ),
     ];
     for (name, converter, flags) in expected {
         let tool = entry(name);
         assert_eq!(tool.convert.map(|(c, _)| c), Some(converter), "{name}");
-        assert!(has(tool, flags), "{name}: {flags:?}");
+        assert!(flags.is_empty() || has(tool, flags), "{name}: {flags:?}");
     }
     for tool in CATALOGUE {
         assert_eq!(

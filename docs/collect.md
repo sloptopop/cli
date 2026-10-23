@@ -151,6 +151,7 @@ the source and in the `--dry-run` plan.
 | `detekt` | detekt 1.23.8 | Apache-2.0 | jvm | `detekt --input . --config /opt/detekt/sloptopop.yml --report sarif:<out>` | `detekt.sarif` | 2 |
 | `clang-tidy` | clang-tidy 19.1.0 | Apache-2.0 WITH LLVM-exception | cpp | `sloptopop-clang-tidy '-*,<the checks that are on>'` (stdout, converted; the image's wrapper runs clang-tidy over the C and C++ files `compile_commands.json` lists, from the root, `build/` or `out/`, else over every C file as C17 and every C++ file as C++17, always for `x86_64-linux-gnu`; see [C and C++ defect rules](#c-and-c-defect-rules)) | `clang-tidy.sarif` | |
 | `cppcheck` | cppcheck 2.17.1 | GPL-3.0-or-later | cpp | `sloptopop-cppcheck --enable=warning,performance,portability --library=googletest --library=/usr/share/sloptopop-cppcheck/tests.cfg` (stdout, converted; the image's wrapper runs Cppcheck over the C and C++ sources, from `compile_commands.json` if there is one, else as C17 and C++17 with no defines, for the `unix64` platform; see [C and C++ defect rules](#c-and-c-defect-rules)) | `cppcheck.sarif` | |
+| `shellcheck` | shellcheck 0.11.0 | GPL-3.0-or-later | shell | `sloptopop-shellcheck` (stdout, converted; the image's wrapper runs `shellcheck --format=json1 --external-sources` on each shell script, one at a time in sorted order: every `*.sh` and `*.bash` file, and every other file whose first line is a shebang that runs `sh`, `bash`, `dash`, `ksh`, `ash` or `busybox sh`, directly or through `env`, outside `.git`, `.sloptopop` and `node_modules`; a file that states its dialect (its shebang, a `# shellcheck shell=` directive in its leading comments, or a `.bash`, `.bats`, `.dash` or `.ksh` name) is checked as that dialect, any other as POSIX `sh`; see [Shell defect rules](#shell-shellcheck)) | `shellcheck.sarif` | |
 
 `<rules>` mounts: the rule directories are mounted read-only at `/rules/0`
 (and `/rules/1`). The pack and `.sloptopop/rules/` work as before; with
@@ -174,6 +175,18 @@ these entries are listed as `skipped` with the command to run yourself after
 | `c8` | ISC | node | `c8 --reporter=lcov --reports-dir=.sloptopop/reports npm test` (Vitest and Jest: their `lcov` reporter, same directory) | `lcov.info` |
 | `coverlet` | MIT | dotnet | `dotnet test /p:CollectCoverage=true /p:CoverletOutputFormat=lcov /p:CoverletOutput=.sloptopop/reports/dotnet.lcov` | `dotnet.lcov` |
 | `gcovr` | BSD-3-Clause | cpp | `gcovr --lcov .sloptopop/reports/cpp.lcov` (after building with coverage and running the tests) | `cpp.lcov` |
+
+### Clippy (documented, not run yet)
+
+Clippy needs the project's own build, so `collect` does not run it: it is
+listed as `skipped`. The client will run it (`sloptopop local evidence
+--rerun`, LX-CAR-4); until then `collect` only knows how to convert what
+it prints, keeping its machine-applicable suggestions (see
+[Fixes](#fixes)).
+
+| Name | Licence | Applies to | Command | Raw output |
+|---|---|---|---|---|
+| `clippy` | MIT OR Apache-2.0 | rust | `cargo clippy --message-format=json` (stdout) | `.raw/clippy.json`, converted to `clippy.sarif` |
 
 ## The images
 
@@ -369,6 +382,7 @@ Each listed rule belongs to exactly one defect class:
 | DC15 | a closure that captures a loop variable late | 665 (closest) |
 | DC16 | wrong operator, condition or call | 480, 481, 570, 571, 563 |
 | DC17 | swallowed error (empty handler) | 390 |
+| DC18 | unsafe shell expansion: word splitting and globbing of an unquoted expansion, an empty variable in `rm -rf "$d/"`, an unchecked `cd` | 78, 88, 73 |
 | DC19 | a language trap: mutable default argument, `==` coercion, `finally` overriding `return` | 1188, 597 |
 | DC20 | a forced unwrap, cast or `try!` that crashes when it fails | 617, 248 |
 
@@ -448,18 +462,31 @@ checkers, which report nothing and run with the checkers that need them),
 and the bugprone checks for the same classes. The command line is
 `sloptopop-clang-tidy '-*,<every check that is on>'`.
 
+The wrapper also has clang-tidy export its fixes (`--export-fixes`) and
+prints them after the diagnostics; no file is changed. `collect` carries
+the fix-its of the checks marked "its fix-it is carried" (the reviewed fix
+table lists them, see [Fixes](#fixes)), and of no other check.
+
 <!-- rules: CLANG_TIDY_RULES -->
 
 | Rule | Class | Finds | Default |
 |---|---|---|---|
+| `bugprone-bool-pointer-implicit-conversion` | DC16 | a pointer to bool used as a condition: the test checks the pointer, not the value it points to (its fix-it is carried) | on |
 | `bugprone-branch-clone` | DC16 | identical branches of an if/else chain or switch: a copy-paste or wrong-branch error | off: precision 0/20 on the C/C++ precision corpus (29 findings, with the image's system headers): the shared branch bodies are deliberate, and three "identical" verdicts come from bodies clang could not type-check |
 | `bugprone-dangling-handle` | DC05 | a string_view or other non-owning handle that outlives the object it points into | on |
 | `bugprone-empty-catch` | DC17 | an empty catch handler hides the error (the swallowed-errors transformation) | on |
 | `bugprone-implicit-widening-of-multiplication-result` | DC08 | a multiplication done in the narrow type, then widened: the product can overflow first | off: precision 1/20 on the C/C++ precision corpus (22 findings, with the image's system headers): products of small constants or bounded values that fit in int |
+| `bugprone-inaccurate-erase` | DC16 | erase(remove(...)) without the end iterator: only one element is erased instead of the removed range (its fix-it is carried) | on |
 | `bugprone-infinite-loop` | DC16 | a loop whose condition no statement in its body can change | off: one finding on the C/C++ precision corpus with the image's system headers (0/1: both loop variables change in the body), too few to overturn the earlier 0/14 |
+| `bugprone-misplaced-operator-in-strlen-in-alloc` | DC06 | malloc(strlen(s + 1)): the + 1 is inside strlen, so the buffer is two bytes too small and the copy overflows it (its fix-it is carried) | on |
+| `bugprone-misplaced-pointer-arithmetic-in-alloc` | DC06 | malloc(n) + k instead of malloc(n + k): the pointer is moved instead of the size grown, so writes run past the allocation (its fix-it is carried) | on |
 | `bugprone-misplaced-widening-cast` | DC08 | a cast that widens the result of a calculation that already overflowed | on |
 | `bugprone-narrowing-conversions` | DC08 | an implicit conversion that can lose value (integer or floating point) | off: precision 0/20 on the C/C++ precision corpus (246 findings, with the image's system headers): values that fit the target type in every reachable case |
+| `bugprone-posix-return` | DC16 | a POSIX call that returns an error number compared with < 0 (it never is), so the error check never fires (its fix-it is carried) | on |
 | `bugprone-signed-char-misuse` | DC08 | a signed char converted to a wider integer: negative values sign-extend | off: precision 1/10 on the C/C++ precision corpus (10 findings, with the image's system headers): the converted values are ASCII, small table entries or bytes read as signed on purpose |
+| `bugprone-suspicious-memset-usage` | DC16 | memset with its value and size swapped, a fill value of '0' or one that does not fit a byte: the buffer is not set as meant (its fix-it is carried) | on |
+| `bugprone-suspicious-semicolon` | DC16 | a semicolon right after if, for or while: the body below runs unconditionally or once (its fix-it is carried) | on |
+| `bugprone-suspicious-string-compare` | DC16 | strcmp used as a boolean: the condition is true when the strings differ, the opposite of what it reads like (its fix-it, an added `!= 0`, keeps the behaviour and is not carried) | on |
 | `bugprone-too-small-loop-variable` | DC07 | a loop variable whose type cannot reach the loop bound | on |
 | `bugprone-unchecked-optional-access` | DC01 | std::optional (and absl/folly) value read without checking it holds one | on |
 | `bugprone-unused-return-value` | DC02 | the result of a function whose result must be used is dropped | on |
@@ -628,6 +655,34 @@ these classes and are dropped.
 | `va_list_usedBeforeStarted` | DC10 | a va_list used before va_start | on |
 | `zerodiv` | DC09 | a division by zero | on |
 | `zerodivcond` | DC09 | a division by a value an earlier or later check says can be zero | on |
+
+### Shell: ShellCheck
+
+`shellcheck` reports the comments of the rules below and drops every other
+one (style advice, syntax and portability notes). It runs every check;
+a rule that is off has its comments dropped from the report. Precision
+corpus: the shell scripts of the evaluation corpus and of three public
+shell projects at pinned commits (the shell precision corpus); most of its
+findings come from one of those projects, so the sample is narrow.
+`SC2006`, `SC2086` and `SC2164` carry ShellCheck's fix (see
+[Fixes](#fixes)), but only while the rule is on, so of the three only
+`SC2164`'s fix is carried by default.
+
+<!-- rules: SHELLCHECK_RULES -->
+
+| Rule | Class | Finds | Default |
+|---|---|---|---|
+| `SC2006` | DC18 | a legacy backquoted command substitution, whose backslash and nesting rules silently change the command it runs (its fix is reviewed) | off: precision 0/12 on the shell precision corpus (12 findings): no backquoted command holds a backslash or a nested backquote, so $(...) runs the same command and the fix only modernises it |
+| `SC2046` | DC18 | an unquoted command substitution: its output is split into words and globbed | off: precision 0/7 on the shell precision corpus (7 findings): one-word outputs (uname -s, id -u) and lists of process ids that kill is meant to get as separate words |
+| `SC2050` | DC16 | a comparison of two constants: the test always gives the same answer | on |
+| `SC2068` | DC18 | an unquoted $@ or array expansion: its elements are split again and globbed | off: three findings on the shell precision corpus, too few to measure; new to the table, so off |
+| `SC2086` | DC18 | an unquoted variable expansion: its value is split into words and globbed (its fix is reviewed) | off: precision 1/20 on the shell precision corpus (67 findings): values the script builds from constants, version numbers and fixed paths, with no blank or glob character in them; the hit is a script's own directory, which may have a space in its path |
+| `SC2115` | DC18 | rm -rf "$var/" with a variable that may be empty: it removes from the root | off: one finding on the shell precision corpus, too few to measure; new to the table, so off |
+| `SC2154` | DC10 | a variable that is used but never assigned (a typo, or one the caller must set) | off: precision 0/13 on the shell precision corpus (13 findings): variables a helper function assigns with read, which ShellCheck does not follow |
+| `SC2155` | DC02 | local or export with a command substitution: the declaration's status masks the command's | off: precision 3/9 on the shell precision corpus (9 findings): the hits mask a failing command under set -e; the misses are in scripts that never check the status, or run uname |
+| `SC2164` | DC18 | cd without \|\| exit: when it fails, the following commands run in the wrong directory (its fix is reviewed) | on |
+| `SC2181` | DC02 | $? tested instead of the command: a command run in between (a sleep, an echo) replaces the status checked | off: precision 4/20 on the shell precision corpus (21 findings): the hits test the status of a sleep run after the command; the misses test the command's own status, only indirectly |
+| `SC2193` | DC16 | a comparison whose two sides can never be equal: the test is always false | on |
 
 ### Python: Ruff
 
@@ -923,8 +978,8 @@ Biome (`biome`):
 
 ## Conversions
 
-Six tools write no SARIF, and five more keep their fixes only in another
-format. They write that format to `.sloptopop/reports/.raw/` (hidden, never
+Six tools write no SARIF, five more keep their fixes only in another
+format, and ShellCheck and Clippy have neither in SARIF. They write that format to `.sloptopop/reports/.raw/` (hidden, never
 read by the engine), and `collect` converts it, keeping each tool's own
 rule id and message, and its fixes (see [Fixes](#fixes)):
 
@@ -938,7 +993,9 @@ rule id and message, and its fixes (see [Fixes](#fixes)):
 | `phpcs` | PHP_CodeSniffer JSON | every message, `ERROR` as error, others as warning |
 | `pylint-cyclic-import` | Pylint `json2` | every message; fatal and error as error, warning, refactor and convention as warning |
 | `dependency-cruiser` | dependency-cruiser JSON | every rule violation, at its `from` module, with the cycle |
-| `clang-tidy` | clang-tidy diagnostics | every diagnostic of a check that is on (compiler diagnostics are not findings), with its defect class, how the files were compiled, and lower confidence without a compile database |
+| `clang-tidy` | clang-tidy diagnostics, then the fixes it exported (`--export-fixes` YAML) | every diagnostic of a check that is on (compiler diagnostics are not findings), with its defect class, how the files were compiled, lower confidence without a compile database, and the fix-its of the reviewed checks |
+| `shellcheck` | ShellCheck `json1`, one report per file | every comment of a rule that is on (`error` as error, `warning` as warning, `info` and `style` as note), with its defect class and its `fix.replacements` |
+| `clippy` (not run by `collect`) | Cargo `--message-format=json` (or rustc's `--error-format=json`) | every diagnostic with a lint or error code (`error` as error, `warning` as warning, others as note), with its machine-applicable suggestion |
 | `cppcheck` | Cppcheck XML version 2 | every error of an id that is on, at its first location (`error` as error; `warning`, `portability`, `performance` as warning; others as note), with its defect class, how the files were compiled, and lower confidence without a compile database |
 
 Output that cannot be read is a `failed` tool, never an empty report.
@@ -978,8 +1035,8 @@ every fix that was not kept in `properties["sloptopop/droppedFixes"]`
 
 | `sloptopop/applicability` | Means | From |
 |---|---|---|
-| `safe` | the tool applies it in its default fix mode, with no opt-in | Ruff `safe`; ESLint's autofix (`fix`); Biome's safe fix |
-| `unsafe` | the tool applies it only with an opt-in | Ruff `unsafe`; Biome's unsafe fix |
+| `safe` | the tool applies it in its default fix mode, with no opt-in | Ruff `safe`; ESLint's autofix (`fix`); Biome's safe fix; ShellCheck's `fix` (`shellcheck -f diff` applies every one), except below; clang-tidy's fix-it on a warning (`--fix`); rustc's and Clippy's `MachineApplicable` suggestion (`cargo fix`, `cargo clippy --fix`) |
+| `unsafe` | the tool applies it only with an opt-in, or it changes what the code does beyond the finding | Ruff `unsafe`; Biome's unsafe fix; clang-tidy's fix-it on a note (`--fix-notes`); ShellCheck's SC2006 fix when the backquoted text holds a backslash (inside backquotes `\$`, `` \` `` and `\\` lose the backslash, inside `$(…)` they keep it) |
 | `suggestion` | the tool never applies it by itself | Ruff `displayonly`; ESLint `suggestions`; Opengrep and Semgrep rule fixes; fixes written in a tool's own SARIF (staticcheck) |
 
 **Where a fix is.** Every tool counts positions its own way; `collect`
@@ -993,6 +1050,19 @@ probe with non-ASCII text, CRLF line ends and a byte order mark show:
 | ESLint | `range`, UTF-16 code units | into the text without its byte order mark |
 | staticcheck (its SARIF) | 1-based lines and columns, columns in UTF-8 bytes | whatever its SARIF `columnKind` says |
 | Opengrep, Semgrep | byte offsets | into the raw file |
+| ShellCheck (`json1`) | 1-based lines and columns, columns in code points, a tab one column | the byte order mark is column 1 of line 1; a carriage return before a line feed is a character of its line |
+| clang-tidy (`--export-fixes`) | byte offsets | into the raw file, byte order mark included; a diagnostic's `FileOffset` finds its finding (clang's line and byte column) |
+| rustc, Clippy | `byte_start`, `byte_end` | into the file as committed (rustc maps them back over the byte order mark it skips and the CRLF it normalises) |
+
+Insertions at one point keep the order the tool gave them; ShellCheck's
+`insertionPoint` and `precedence` are not used, so a ShellCheck fix whose
+insertion touches another of its edits is dropped (`fix.overlap-within`).
+clang-tidy's fix-its are carried only for the checks the reviewed fix
+table lists; the others are dropped as `fix.unreviewed`. Several fix-it
+notes of one clang-tidy diagnostic, or several machine-applicable children
+of one rustc diagnostic, are alternatives (`fix.alternatives`); a rustc
+suggestion that is `MaybeIncorrect`, `HasPlaceholders` or `Unspecified`
+is dropped as `fix.unconverted`.
 
 The SARIF fixes other tools write are dropped (`fix.unconverted`): their
 text regions do not say their unit reliably (Ruff's, staticcheck's and
@@ -1012,7 +1082,8 @@ level for one finding (`fix.alternatives`); a fix in several files
 (`fix.multi-file`); a fix without a file or an edit (`fix.placeholder`);
 an ESLint fix for text other than the file's (`fix.stale`); a path that is
 not a regular file below the root (`fix.path`); a level or format the
-converter does not know (`fix.unconverted`); and a safe fix whose
+converter does not know (`fix.unconverted`); a clang-tidy fix-it of a
+check the reviewed fix table does not list (`fix.unreviewed`); and a safe fix whose
 safety the project's configuration can change (`fix.config`, see below).
 
 **Reviewed.** `sloptopop/reviewed` is `true` only when the reviewed fix
@@ -1021,7 +1092,12 @@ upstream version, the rule and the level, with the row switched `on`. The
 level the tool reports must equal the table's: a promoted fix, a lying
 report or a newer tool version makes the fix unreviewed (it is still
 carried, never planned). The table holds the 35 safe-level rules the
-pinned tools fixed on sloptopop's public corpus. Three are owner defaults
+pinned tools fixed on sloptopop's public corpus, ShellCheck's SC2006,
+SC2086 and SC2164 (the first two are off, so only SC2164's fix is carried
+by default; see [Shell: ShellCheck](#shell-shellcheck)), and the seven clang-tidy checks whose fix-its fix the
+defect they report (the C and C++ table above; `suspicious-string-compare`'s
+fix-it only restates the code, so it is not listed). Clippy has no rows
+yet. Three are owner defaults
 and **switchable** (set their state to `off` to exclude them):
 Biome `useImportType` (can break decorator metadata and imports kept for
 their side effects), Biome `noTsIgnore` (`@ts-expect-error` fails, TS2578,
@@ -1093,7 +1169,8 @@ never chosen automatically:
   `--version` line;
 - the entries that exist only as images (`eslint-sonarjs`,
   `eslint-typescript`, `dependency-cruiser`,
-  `sonaranalyzer-csharp`, `jscpd`, `detekt`, `clang-tidy`, `cppcheck`) are `missing`;
+  `sonaranalyzer-csharp`, `jscpd`, `detekt`, `clang-tidy`, `cppcheck`,
+  `shellcheck`) are `missing`;
 - OSV-Scanner downloads its own database (`--offline-vulnerabilities
   --download-offline-databases`) and govulncheck asks vuln.go.dev;
 - there is no time limit.
@@ -1139,7 +1216,7 @@ Apache-2.0, like the rule pack built into it.
 
 The images themselves carry each tool, its runtime and its base system
 under their own licences (GPL-3.0 for golangci-lint, GPL-3.0-or-later for
-Cppcheck, GPL-2.0-or-later for Pylint, LGPL for Opengrep, Semgrep and the
+Cppcheck and ShellCheck, GPL-2.0-or-later for Pylint, LGPL for Opengrep, Semgrep and the
 Sonar analyzers, GPL-2.0 for parts
 of the Debian or Alpine base). Each image lists them in its
 `org.opencontainers.image.licenses` label and SBOM and holds their texts and
@@ -1181,6 +1258,8 @@ without them.
 | `detekt` | Apache-2.0 | [detekt v1.23.8 LICENSE](https://github.com/detekt/detekt/blob/v1.23.8/LICENSE) |
 | `clang-tidy` | Apache-2.0 WITH LLVM-exception | [clang-tools-extra 19.1.0 LICENSE.TXT](https://github.com/llvm/llvm-project/blob/llvmorg-19.1.0/clang-tools-extra/LICENSE.TXT) |
 | `cppcheck` | GPL-3.0-or-later (the image also holds its tinyxml2 library, Zlib) | [Cppcheck 2.17.1 COPYING](https://github.com/danmar/cppcheck/blob/2.17.1/COPYING), and the source headers' "version 3 of the License, or (at your option) any later version" |
+| `shellcheck` | GPL-3.0-or-later (the image also holds Debian's libffi8, MIT, and libnuma1, LGPL-2.1) | [ShellCheck v0.11.0 LICENSE](https://github.com/koalaman/shellcheck/blob/v0.11.0/LICENSE) |
+| `clippy` | MIT OR Apache-2.0 | [LICENSE-APACHE](https://github.com/rust-lang/rust/blob/1.99.0/src/tools/clippy/LICENSE-APACHE) and [LICENSE-MIT](https://github.com/rust-lang/rust/blob/1.99.0/src/tools/clippy/LICENSE-MIT) at Rust 1.99.0 |
 | `cargo-llvm-cov` | Apache-2.0 OR MIT | [LICENSE-APACHE](https://github.com/taiki-e/cargo-llvm-cov/blob/v0.9.1/LICENSE-APACHE) and [LICENSE-MIT](https://github.com/taiki-e/cargo-llvm-cov/blob/v0.9.1/LICENSE-MIT) at v0.9.1 |
 | `coverage.py` | Apache-2.0 | [coverage.py 7.16.2 LICENSE.txt](https://github.com/nedbat/coveragepy/blob/7.16.2/LICENSE.txt) |
 | `c8` | ISC | [c8 v12.0.0 LICENSE.txt](https://github.com/bcoe/c8/blob/v12.0.0/LICENSE.txt) |

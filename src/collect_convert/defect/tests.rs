@@ -22,6 +22,7 @@ fn class_ids_are_distinct_and_well_formed() {
         Defect::LoopCapture,
         Defect::WrongOperator,
         Defect::SwallowedError,
+        Defect::ShellExpansion,
         Defect::LanguageTrap,
         Defect::ForcedCrash,
     ];
@@ -30,7 +31,7 @@ fn class_ids_are_distinct_and_well_formed() {
         ids,
         [
             "DC01", "DC02", "DC03", "DC04", "DC05", "DC06", "DC07", "DC08", "DC09", "DC10", "DC11",
-            "DC12", "DC13", "DC14", "DC15", "DC16", "DC17", "DC19", "DC20"
+            "DC12", "DC13", "DC14", "DC15", "DC16", "DC17", "DC18", "DC19", "DC20"
         ],
         "ids are stable and in class order"
     );

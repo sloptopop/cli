@@ -262,6 +262,37 @@ fn the_c_and_cpp_analyzers_get_the_host_path_to_map_a_compile_database() {
 }
 
 #[test]
+fn shell_scripts_are_checked_by_shellcheck_and_clippy_never_runs() {
+    let repo = Repo::new(&["install.sh", "Cargo.toml"]);
+    let ran = repo.run("docker");
+    assert_eq!(ran.code, Ok(0), "{}", ran.stderr);
+    let calls = repo.calls();
+    assert!(
+        calls.contains("--entrypoint sloptopop-shellcheck "),
+        "{calls}"
+    );
+    assert!(!calls.contains("clippy"), "{calls}");
+    let statuses = statuses(&repo.record());
+    assert!(
+        statuses.contains(&("shellcheck".to_owned(), "ran".to_owned())),
+        "{statuses:?}"
+    );
+    assert!(
+        statuses.contains(&(
+            "clippy".to_owned(),
+            "skipped documented only: run it after your tests".to_owned()
+        )),
+        "{statuses:?}"
+    );
+    let report =
+        fs::read_to_string(repo.root.0.join(".sloptopop/reports/shellcheck.sarif")).unwrap();
+    assert!(
+        report.contains("\"SC2164\"") && report.contains("\"DC18\""),
+        "{report}"
+    );
+}
+
+#[test]
 fn go_and_dotnet_prepare_their_dependencies_once() {
     let repo = Repo::new(&["go.mod", "app.csproj"]);
     let ran = repo.run("docker");

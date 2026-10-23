@@ -47,7 +47,7 @@ impl Context<'_> {
         clippy::too_many_arguments,
         reason = "one argument per field of the fix the caller decides"
     )]
-    fn fix(
+    pub(super) fn fix(
         &self,
         rule: &str,
         level: Level,

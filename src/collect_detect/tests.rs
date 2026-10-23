@@ -83,3 +83,92 @@ fn detection_reads_only_root_files() {
     );
     assert!(detect(&root.0.join("missing")).is_err(), "missing root");
 }
+
+#[test]
+fn shell_scripts_are_found_anywhere_below_the_root() {
+    let tree = |files: &[(&str, &str)]| {
+        let root = TempDir::new();
+        for (path, text) in files {
+            let path = root.0.join(path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, text).unwrap();
+        }
+        detect(&root.0).unwrap().contains(&Ecosystem::Shell)
+    };
+    for (files, shell) in [
+        (&[("a/b/run.sh", "")][..], true),
+        (&[("a/b/run.bash", "")][..], true),
+        (
+            &[("a/install", "#!/usr/bin/env -S bash -e\necho\n")][..],
+            true,
+        ),
+        (
+            &[
+                ("a/x.py", "#!/usr/bin/env python3\n"),
+                ("b/c/notes", "#!/bin/sh"),
+            ][..],
+            true,
+        ),
+        // The wrapper's skipped directories, other files and an empty one.
+        (&[("node_modules/x/run.sh", "")][..], false),
+        (&[(".git/hooks/pre-commit", "#!/bin/sh\n")][..], false),
+        (&[(".sloptopop/reports/a.sh", "")][..], false),
+        (
+            &[
+                ("a/run.SH", ""),
+                ("a/notes", "echo #!/bin/sh\n"),
+                ("a/empty", ""),
+            ][..],
+            false,
+        ),
+    ] {
+        assert_eq!(tree(files), shell, "{files:?}");
+    }
+    // A long first line is cut at 256 bytes, and only the first line counts.
+    let long = format!("#!/bin/sh {}\n", "x".repeat(300));
+    assert!(tree(&[("a/long", &long)]));
+    assert!(!tree(&[("a/second", "\n#!/bin/sh\n")]));
+}
+
+#[cfg(unix)]
+#[test]
+fn links_are_not_followed_to_shell_scripts() {
+    let root = TempDir::new();
+    let elsewhere = TempDir::new();
+    fs::write(elsewhere.0.join("run.sh"), "").unwrap();
+    // (A root file named *.sh counts by its name, as every manifest does.)
+    fs::create_dir(root.0.join("a")).unwrap();
+    std::os::unix::fs::symlink(&elsewhere.0, root.0.join("a/dir")).unwrap();
+    std::os::unix::fs::symlink(elsewhere.0.join("run.sh"), root.0.join("a/run.sh")).unwrap();
+    assert!(!detect(&root.0).unwrap().contains(&Ecosystem::Shell));
+}
+
+#[test]
+fn shebangs_of_bourne_shells_by_path_or_through_env() {
+    for (line, shell) in [
+        ("#!/bin/sh", true),
+        ("#! /bin/bash -eu", true),
+        ("#!/usr/bin/dash", true),
+        ("#!/bin/ksh\t-x", true),
+        ("#!/bin/ash", true),
+        ("#!/bin/busybox sh", true),
+        ("#!/usr/bin/env bash", true),
+        ("#!/usr/bin/env  -S  sh -e", true),
+        ("#!/usr/bin/env busybox sh", true),
+        ("#!/bin/busybox ash", false),
+        ("#!/bin/busybox", false),
+        ("#!/usr/bin/env busybox ash", false),
+        ("#!/usr/bin/env perl sh", false),
+        ("#!/usr/bin/env -Sbash", false),
+        ("#!/usr/bin/env", false),
+        ("#!/usr/bin/env -S", false),
+        ("#!/bin/shell", false),
+        ("#!/bin/zsh", false),
+        ("#!sh", false),
+        ("#!", false),
+        ("# /bin/sh", false),
+        ("#!/bin/bash\r", false),
+    ] {
+        assert_eq!(is_shell_shebang(line.as_bytes()), shell, "{line:?}");
+    }
+}

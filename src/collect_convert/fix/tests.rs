@@ -128,6 +128,25 @@ fn byte_offsets_are_checked_against_the_file() {
     assert_eq!(mixed.byte(u64::MAX), Err(Drop::OutOfRange));
 }
 
+#[test]
+fn byte_offsets_have_clangs_line_and_byte_column() {
+    let text = source("\u{feff}ab\r\né😀x\n".as_bytes());
+    assert_eq!(text.position(0), Some((1, 1)));
+    assert_eq!(
+        text.position(3),
+        Some((1, 4)),
+        "the byte order mark is 3 bytes"
+    );
+    assert_eq!(text.position(5), Some((1, 6)), "the carriage return");
+    assert_eq!(text.position(6), Some((1, 7)), "the line feed ends line 1");
+    assert_eq!(text.position(7), Some((2, 1)));
+    assert_eq!(text.position(13), Some((2, 7)), "after `é😀`");
+    assert_eq!(text.position(15), Some((3, 1)), "the end of the file");
+    assert_eq!(text.position(16), None);
+    assert_eq!(text.position(u64::MAX), None);
+    assert_eq!(source(b"").position(0), Some((1, 1)));
+}
+
 fn edit(start: usize, end: usize, text: &str) -> Edit {
     Edit {
         start,
@@ -251,6 +270,7 @@ fn every_drop_reason_has_its_name() {
         (Drop::Path, "fix.path"),
         (Drop::Config, "fix.config"),
         (Drop::Unconverted, "fix.unconverted"),
+        (Drop::Unreviewed, "fix.unreviewed"),
     ];
     for (drop, name) in all {
         assert_eq!(drop.as_str(), name);

@@ -53,6 +53,10 @@ pub(crate) enum Defect {
     WrongOperator,
     /// DC17: swallowed error, an empty handler (CWE-390).
     SwallowedError,
+    /// DC18: unsafe shell expansion: word splitting and globbing, an
+    /// empty variable in `rm -rf "$d/"`, an unchecked `cd` (CWE-78, CWE-88,
+    /// CWE-73).
+    ShellExpansion,
     /// DC19: a language trap: a mutable default argument, `==` coercion,
     /// `finally` overriding `return` (CWE-1188, CWE-597).
     LanguageTrap,
@@ -82,6 +86,7 @@ impl Defect {
             Self::LoopCapture => "DC15",
             Self::WrongOperator => "DC16",
             Self::SwallowedError => "DC17",
+            Self::ShellExpansion => "DC18",
             Self::LanguageTrap => "DC19",
             Self::ForcedCrash => "DC20",
         }

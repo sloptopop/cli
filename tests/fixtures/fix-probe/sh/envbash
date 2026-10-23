@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+y=$(echo a); echo $y

@@ -1,0 +1,387 @@
+# sloptopop-clang-tidy: no compile database, files parsed as -std=c17 / -std=c++17 -I. -Iinclude
+3 warnings generated.
+/src/bom.c:4:15: warning: addition operator is applied to the argument of strlen instead of its result [bugprone-misplaced-operator-in-strlen-in-alloc]
+    4 |     char *p = malloc(strlen(s + 1));
+      |               ^      ~~~~~~~~~~~~~
+      |                      strlen(s) + 1
+/src/bom.c:5:9: warning: function 'strcmp' is called without explicitly comparing result [bugprone-suspicious-string-compare]
+    5 |     if (strcmp(s, "a")) return p;
+      |         ^             
+      |                        != 0
+/src/bom.c:8:33: warning: performing an implicit widening conversion to type 'long' of a multiplication performed in type 'int' [bugprone-implicit-widening-of-multiplication-result]
+    8 | long mul(int a, int b) { return a * b; }
+      |                                 ^
+/src/bom.c:8:33: note: make conversion explicit to silence this warning
+    1 | <U+FEFF>#include <stdlib.h>
+      |         
+    2 | #include <string.h>
+    3 | char *dup(const char *s) {
+    4 |     char *p = malloc(strlen(s + 1));
+    5 |     if (strcmp(s, "a")) return p;
+    6 |     return 0;
+    7 | }
+    8 | long mul(int a, int b) { return a * b; }
+      |                                 ^~~~~
+      |                                 (long)( )
+/src/bom.c:8:33: note: perform multiplication in a wider type
+    8 | long mul(int a, int b) { return a * b; }
+      |                                 ^
+      |                                 (long)
+3 warnings generated.
+/src/crlf.c:4:15: warning: addition operator is applied to the argument of strlen instead of its result [bugprone-misplaced-operator-in-strlen-in-alloc]
+    4 |     char *p = malloc(strlen(s + 1));
+      |               ^      ~~~~~~~~~~~~~
+      |                      strlen(s) + 1
+/src/crlf.c:5:9: warning: function 'strcmp' is called without explicitly comparing result [bugprone-suspicious-string-compare]
+    5 |     if (strcmp(s, "a")) return p;
+      |         ^             
+      |                        != 0
+/src/crlf.c:8:33: warning: performing an implicit widening conversion to type 'long' of a multiplication performed in type 'int' [bugprone-implicit-widening-of-multiplication-result]
+    8 | long mul(int a, int b) { return a * b; }
+      |                                 ^
+/src/crlf.c:8:33: note: make conversion explicit to silence this warning
+    1 | #include <stdlib.h>
+    2 | #include <string.h>
+    3 | char *dup(const char *s) {
+    4 |     char *p = malloc(strlen(s + 1));
+    5 |     if (strcmp(s, "a")) return p;
+    6 |     return 0;
+    7 | }
+    8 | long mul(int a, int b) { return a * b; }
+      |                                 ^~~~~
+      |                                 (long)( )
+/src/crlf.c:8:33: note: perform multiplication in a wider type
+    8 | long mul(int a, int b) { return a * b; }
+      |                                 ^
+      |                                 (long)
+3 warnings generated.
+/src/nonascii.c:4:50: warning: addition operator is applied to the argument of strlen instead of its result [bugprone-misplaced-operator-in-strlen-in-alloc]
+    4 |     const char *t = "é😀"; (void)t; char *p = malloc(strlen(s + 1));
+      |                                               ^      ~~~~~~~~~~~~~
+      |                                                      strlen(s) + 1
+/src/nonascii.c:5:9: warning: function 'strcmp' is called without explicitly comparing result [bugprone-suspicious-string-compare]
+    5 |     if (strcmp(s, "a")) return p;
+      |         ^             
+      |                        != 0
+/src/nonascii.c:8:33: warning: performing an implicit widening conversion to type 'long' of a multiplication performed in type 'int' [bugprone-implicit-widening-of-multiplication-result]
+    8 | long mul(int a, int b) { return a * b; }
+      |                                 ^
+/src/nonascii.c:8:33: note: make conversion explicit to silence this warning
+    1 | #include <stdlib.h>
+    2 | #include <string.h>
+    3 | char *dup(const char *s) {
+    4 |     const char *t = "é😀"; (void)t; char *p = malloc(strlen(s + 1));
+    5 |     if (strcmp(s, "a")) return p;
+    6 |     return 0;
+    7 | }
+    8 | long mul(int a, int b) { return a * b; }
+      |                                 ^~~~~
+      |                                 (long)( )
+/src/nonascii.c:8:33: note: perform multiplication in a wider type
+    8 | long mul(int a, int b) { return a * b; }
+      |                                 ^
+      |                                 (long)
+3 warnings generated.
+/src/plain.c:4:15: warning: addition operator is applied to the argument of strlen instead of its result [bugprone-misplaced-operator-in-strlen-in-alloc]
+    4 |     char *p = malloc(strlen(s + 1));
+      |               ^      ~~~~~~~~~~~~~
+      |                      strlen(s) + 1
+/src/plain.c:5:9: warning: function 'strcmp' is called without explicitly comparing result [bugprone-suspicious-string-compare]
+    5 |     if (strcmp(s, "a")) return p;
+      |         ^             
+      |                        != 0
+/src/plain.c:8:33: warning: performing an implicit widening conversion to type 'long' of a multiplication performed in type 'int' [bugprone-implicit-widening-of-multiplication-result]
+    8 | long mul(int a, int b) { return a * b; }
+      |                                 ^
+/src/plain.c:8:33: note: make conversion explicit to silence this warning
+    1 | #include <stdlib.h>
+    2 | #include <string.h>
+    3 | char *dup(const char *s) {
+    4 |     char *p = malloc(strlen(s + 1));
+    5 |     if (strcmp(s, "a")) return p;
+    6 |     return 0;
+    7 | }
+    8 | long mul(int a, int b) { return a * b; }
+      |                                 ^~~~~
+      |                                 (long)( )
+/src/plain.c:8:33: note: perform multiplication in a wider type
+    8 | long mul(int a, int b) { return a * b; }
+      |                                 ^
+      |                                 (long)
+# sloptopop-clang-tidy: exported fixes
+---
+MainSourceFile:  '/src/bom.c'
+Diagnostics:
+  - DiagnosticName:  bugprone-misplaced-operator-in-strlen-in-alloc
+    DiagnosticMessage:
+      Message:         addition operator is applied to the argument of strlen instead of its result
+      FilePath:        '/src/bom.c'
+      FileOffset:      84
+      Replacements:
+        - FilePath:        '/src/bom.c'
+          Offset:          91
+          Length:          13
+          ReplacementText: 'strlen(s) + 1'
+    Level:           Warning
+    BuildDirectory:  '/src'
+  - DiagnosticName:  bugprone-suspicious-string-compare
+    DiagnosticMessage:
+      Message:         'function ''strcmp'' is called without explicitly comparing result'
+      FilePath:        '/src/bom.c'
+      FileOffset:      115
+      Replacements:
+        - FilePath:        '/src/bom.c'
+          Offset:          129
+          Length:          0
+          ReplacementText: ' != 0'
+    Level:           Warning
+    BuildDirectory:  '/src'
+  - DiagnosticName:  bugprone-implicit-widening-of-multiplication-result
+    DiagnosticMessage:
+      Message:         'performing an implicit widening conversion to type ''long'' of a multiplication performed in type ''int'''
+      FilePath:        '/src/bom.c'
+      FileOffset:      189
+      Replacements:    []
+    Notes:
+      - Message:         make conversion explicit to silence this warning
+        FilePath:        '/src/bom.c'
+        FileOffset:      189
+        Replacements:
+          - FilePath:        '/src/bom.c'
+            Offset:          3
+            Length:          0
+            ReplacementText: "#include <stddef.h>\n"
+          - FilePath:        '/src/bom.c'
+            Offset:          189
+            Length:          0
+            ReplacementText: '(long)('
+          - FilePath:        '/src/bom.c'
+            Offset:          194
+            Length:          0
+            ReplacementText: ')'
+        Ranges:
+          - FilePath:        '/src/bom.c'
+            FileOffset:      189
+            Length:          5
+      - Message:         perform multiplication in a wider type
+        FilePath:        '/src/bom.c'
+        FileOffset:      189
+        Replacements:
+          - FilePath:        '/src/bom.c'
+            Offset:          189
+            Length:          0
+            ReplacementText: '(long)'
+        Ranges:
+          - FilePath:        '/src/bom.c'
+            FileOffset:      189
+            Length:          1
+    Level:           Warning
+    BuildDirectory:  '/src'
+...
+---
+MainSourceFile:  '/src/crlf.c'
+Diagnostics:
+  - DiagnosticName:  bugprone-misplaced-operator-in-strlen-in-alloc
+    DiagnosticMessage:
+      Message:         addition operator is applied to the argument of strlen instead of its result
+      FilePath:        '/src/crlf.c'
+      FileOffset:      84
+      Replacements:
+        - FilePath:        '/src/crlf.c'
+          Offset:          91
+          Length:          13
+          ReplacementText: 'strlen(s) + 1'
+    Level:           Warning
+    BuildDirectory:  '/src'
+  - DiagnosticName:  bugprone-suspicious-string-compare
+    DiagnosticMessage:
+      Message:         'function ''strcmp'' is called without explicitly comparing result'
+      FilePath:        '/src/crlf.c'
+      FileOffset:      116
+      Replacements:
+        - FilePath:        '/src/crlf.c'
+          Offset:          130
+          Length:          0
+          ReplacementText: ' != 0'
+    Level:           Warning
+    BuildDirectory:  '/src'
+  - DiagnosticName:  bugprone-implicit-widening-of-multiplication-result
+    DiagnosticMessage:
+      Message:         'performing an implicit widening conversion to type ''long'' of a multiplication performed in type ''int'''
+      FilePath:        '/src/crlf.c'
+      FileOffset:      193
+      Replacements:    []
+    Notes:
+      - Message:         make conversion explicit to silence this warning
+        FilePath:        '/src/crlf.c'
+        FileOffset:      193
+        Replacements:
+          - FilePath:        '/src/crlf.c'
+            Offset:          0
+            Length:          0
+            ReplacementText: "#include <stddef.h>\n"
+          - FilePath:        '/src/crlf.c'
+            Offset:          193
+            Length:          0
+            ReplacementText: '(long)('
+          - FilePath:        '/src/crlf.c'
+            Offset:          198
+            Length:          0
+            ReplacementText: ')'
+        Ranges:
+          - FilePath:        '/src/crlf.c'
+            FileOffset:      193
+            Length:          5
+      - Message:         perform multiplication in a wider type
+        FilePath:        '/src/crlf.c'
+        FileOffset:      193
+        Replacements:
+          - FilePath:        '/src/crlf.c'
+            Offset:          193
+            Length:          0
+            ReplacementText: '(long)'
+        Ranges:
+          - FilePath:        '/src/crlf.c'
+            FileOffset:      193
+            Length:          1
+    Level:           Warning
+    BuildDirectory:  '/src'
+...
+---
+MainSourceFile:  '/src/nonascii.c'
+Diagnostics:
+  - DiagnosticName:  bugprone-misplaced-operator-in-strlen-in-alloc
+    DiagnosticMessage:
+      Message:         addition operator is applied to the argument of strlen instead of its result
+      FilePath:        '/src/nonascii.c'
+      FileOffset:      116
+      Replacements:
+        - FilePath:        '/src/nonascii.c'
+          Offset:          123
+          Length:          13
+          ReplacementText: 'strlen(s) + 1'
+    Level:           Warning
+    BuildDirectory:  '/src'
+  - DiagnosticName:  bugprone-suspicious-string-compare
+    DiagnosticMessage:
+      Message:         'function ''strcmp'' is called without explicitly comparing result'
+      FilePath:        '/src/nonascii.c'
+      FileOffset:      147
+      Replacements:
+        - FilePath:        '/src/nonascii.c'
+          Offset:          161
+          Length:          0
+          ReplacementText: ' != 0'
+    Level:           Warning
+    BuildDirectory:  '/src'
+  - DiagnosticName:  bugprone-implicit-widening-of-multiplication-result
+    DiagnosticMessage:
+      Message:         'performing an implicit widening conversion to type ''long'' of a multiplication performed in type ''int'''
+      FilePath:        '/src/nonascii.c'
+      FileOffset:      221
+      Replacements:    []
+    Notes:
+      - Message:         make conversion explicit to silence this warning
+        FilePath:        '/src/nonascii.c'
+        FileOffset:      221
+        Replacements:
+          - FilePath:        '/src/nonascii.c'
+            Offset:          0
+            Length:          0
+            ReplacementText: "#include <stddef.h>\n"
+          - FilePath:        '/src/nonascii.c'
+            Offset:          221
+            Length:          0
+            ReplacementText: '(long)('
+          - FilePath:        '/src/nonascii.c'
+            Offset:          226
+            Length:          0
+            ReplacementText: ')'
+        Ranges:
+          - FilePath:        '/src/nonascii.c'
+            FileOffset:      221
+            Length:          5
+      - Message:         perform multiplication in a wider type
+        FilePath:        '/src/nonascii.c'
+        FileOffset:      221
+        Replacements:
+          - FilePath:        '/src/nonascii.c'
+            Offset:          221
+            Length:          0
+            ReplacementText: '(long)'
+        Ranges:
+          - FilePath:        '/src/nonascii.c'
+            FileOffset:      221
+            Length:          1
+    Level:           Warning
+    BuildDirectory:  '/src'
+...
+---
+MainSourceFile:  '/src/plain.c'
+Diagnostics:
+  - DiagnosticName:  bugprone-misplaced-operator-in-strlen-in-alloc
+    DiagnosticMessage:
+      Message:         addition operator is applied to the argument of strlen instead of its result
+      FilePath:        '/src/plain.c'
+      FileOffset:      81
+      Replacements:
+        - FilePath:        '/src/plain.c'
+          Offset:          88
+          Length:          13
+          ReplacementText: 'strlen(s) + 1'
+    Level:           Warning
+    BuildDirectory:  '/src'
+  - DiagnosticName:  bugprone-suspicious-string-compare
+    DiagnosticMessage:
+      Message:         'function ''strcmp'' is called without explicitly comparing result'
+      FilePath:        '/src/plain.c'
+      FileOffset:      112
+      Replacements:
+        - FilePath:        '/src/plain.c'
+          Offset:          126
+          Length:          0
+          ReplacementText: ' != 0'
+    Level:           Warning
+    BuildDirectory:  '/src'
+  - DiagnosticName:  bugprone-implicit-widening-of-multiplication-result
+    DiagnosticMessage:
+      Message:         'performing an implicit widening conversion to type ''long'' of a multiplication performed in type ''int'''
+      FilePath:        '/src/plain.c'
+      FileOffset:      186
+      Replacements:    []
+    Notes:
+      - Message:         make conversion explicit to silence this warning
+        FilePath:        '/src/plain.c'
+        FileOffset:      186
+        Replacements:
+          - FilePath:        '/src/plain.c'
+            Offset:          0
+            Length:          0
+            ReplacementText: "#include <stddef.h>\n"
+          - FilePath:        '/src/plain.c'
+            Offset:          186
+            Length:          0
+            ReplacementText: '(long)('
+          - FilePath:        '/src/plain.c'
+            Offset:          191
+            Length:          0
+            ReplacementText: ')'
+        Ranges:
+          - FilePath:        '/src/plain.c'
+            FileOffset:      186
+            Length:          5
+      - Message:         perform multiplication in a wider type
+        FilePath:        '/src/plain.c'
+        FileOffset:      186
+        Replacements:
+          - FilePath:        '/src/plain.c'
+            Offset:          186
+            Length:          0
+            ReplacementText: '(long)'
+        Ranges:
+          - FilePath:        '/src/plain.c'
+            FileOffset:      186
+            Length:          1
+    Level:           Warning
+    BuildDirectory:  '/src'
+...

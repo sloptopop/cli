@@ -2896,18 +2896,18 @@
         kind: Run(
             Image {
                 name: "analyzers/clang-tidy",
-                version: "19.1.0-2",
-                digest: "sha256:833f1f4c382810c0871890e591695cd39fcc86a105e30fa569d9f3b40f76f0ba",
+                version: "19.1.0-3",
+                digest: "sha256:ec2be504f104269e4439b5b3aaa57505de1f021ad5f962388e7281fbb32be240",
                 bytes: [
-                    72901945,
-                    73006021,
+                    72902143,
+                    73006219,
                 ],
             },
         ),
         default: true,
         args: [
             Fixed(
-                "-*,bugprone-dangling-handle,bugprone-empty-catch,bugprone-misplaced-widening-cast,bugprone-too-small-loop-variable,bugprone-unchecked-optional-access,bugprone-unused-return-value,bugprone-use-after-move,clang-analyzer-core.BitwiseShift,clang-analyzer-core.CallAndMessage,clang-analyzer-core.DivideZero,clang-analyzer-core.NonNullParamChecker,clang-analyzer-core.NullDereference,clang-analyzer-core.StackAddressEscape,clang-analyzer-core.UndefinedBinaryOperatorResult,clang-analyzer-core.VLASize,clang-analyzer-core.uninitialized.ArraySubscript,clang-analyzer-core.uninitialized.Assign,clang-analyzer-core.uninitialized.Branch,clang-analyzer-core.uninitialized.CapturedBlockVariable,clang-analyzer-core.uninitialized.NewArraySize,clang-analyzer-core.uninitialized.UndefReturn,clang-analyzer-cplusplus.ArrayDelete,clang-analyzer-cplusplus.InnerPointer,clang-analyzer-cplusplus.Move,clang-analyzer-cplusplus.NewDelete,clang-analyzer-cplusplus.NewDeleteLeaks,clang-analyzer-cplusplus.PlacementNew,clang-analyzer-cplusplus.PureVirtualCall,clang-analyzer-cplusplus.StringChecker,clang-analyzer-unix.API,clang-analyzer-unix.BlockInCriticalSection,clang-analyzer-unix.Errno,clang-analyzer-unix.MallocSizeof,clang-analyzer-unix.MismatchedDeallocator,clang-analyzer-unix.StdCLibraryFunctions,clang-analyzer-unix.Vfork,clang-analyzer-unix.cstring.BadSizeArg,clang-analyzer-unix.cstring.NullArg",
+                "-*,bugprone-bool-pointer-implicit-conversion,bugprone-dangling-handle,bugprone-empty-catch,bugprone-inaccurate-erase,bugprone-misplaced-operator-in-strlen-in-alloc,bugprone-misplaced-pointer-arithmetic-in-alloc,bugprone-misplaced-widening-cast,bugprone-posix-return,bugprone-suspicious-memset-usage,bugprone-suspicious-semicolon,bugprone-suspicious-string-compare,bugprone-too-small-loop-variable,bugprone-unchecked-optional-access,bugprone-unused-return-value,bugprone-use-after-move,clang-analyzer-core.BitwiseShift,clang-analyzer-core.CallAndMessage,clang-analyzer-core.DivideZero,clang-analyzer-core.NonNullParamChecker,clang-analyzer-core.NullDereference,clang-analyzer-core.StackAddressEscape,clang-analyzer-core.UndefinedBinaryOperatorResult,clang-analyzer-core.VLASize,clang-analyzer-core.uninitialized.ArraySubscript,clang-analyzer-core.uninitialized.Assign,clang-analyzer-core.uninitialized.Branch,clang-analyzer-core.uninitialized.CapturedBlockVariable,clang-analyzer-core.uninitialized.NewArraySize,clang-analyzer-core.uninitialized.UndefReturn,clang-analyzer-cplusplus.ArrayDelete,clang-analyzer-cplusplus.InnerPointer,clang-analyzer-cplusplus.Move,clang-analyzer-cplusplus.NewDelete,clang-analyzer-cplusplus.NewDeleteLeaks,clang-analyzer-cplusplus.PlacementNew,clang-analyzer-cplusplus.PureVirtualCall,clang-analyzer-cplusplus.StringChecker,clang-analyzer-unix.API,clang-analyzer-unix.BlockInCriticalSection,clang-analyzer-unix.Errno,clang-analyzer-unix.MallocSizeof,clang-analyzer-unix.MismatchedDeallocator,clang-analyzer-unix.StdCLibraryFunctions,clang-analyzer-unix.Vfork,clang-analyzer-unix.cstring.BadSizeArg,clang-analyzer-unix.cstring.NullArg",
             ),
         ],
         host: ImageOnly,
@@ -2918,6 +2918,12 @@
             (
                 ClangTidy(
                     [
+                        Rule {
+                            id: "bugprone-bool-pointer-implicit-conversion",
+                            class: WrongOperator,
+                            reason: "a pointer to bool used as a condition: the test checks the pointer, not the value it points to (LX-CAR-1: its fix-it is carried)",
+                            off: None,
+                        },
                         Rule {
                             id: "bugprone-branch-clone",
                             class: WrongOperator,
@@ -2947,12 +2953,30 @@
                             ),
                         },
                         Rule {
+                            id: "bugprone-inaccurate-erase",
+                            class: WrongOperator,
+                            reason: "erase(remove(...)) without the end iterator: only one element is erased instead of the removed range (LX-CAR-1: its fix-it is carried)",
+                            off: None,
+                        },
+                        Rule {
                             id: "bugprone-infinite-loop",
                             class: WrongOperator,
                             reason: "a loop whose condition no statement in its body can change",
                             off: Some(
                                 "one finding on the C/C++ precision corpus with the image's system headers (0/1: both loop variables change in the body), too few to overturn the earlier 0/14",
                             ),
+                        },
+                        Rule {
+                            id: "bugprone-misplaced-operator-in-strlen-in-alloc",
+                            class: OutOfBounds,
+                            reason: "malloc(strlen(s + 1)): the + 1 is inside strlen, so the buffer is two bytes too small and the copy overflows it (LX-CAR-1: its fix-it is carried)",
+                            off: None,
+                        },
+                        Rule {
+                            id: "bugprone-misplaced-pointer-arithmetic-in-alloc",
+                            class: OutOfBounds,
+                            reason: "malloc(n) + k instead of malloc(n + k): the pointer is moved instead of the size grown, so writes run past the allocation (LX-CAR-1: its fix-it is carried)",
+                            off: None,
                         },
                         Rule {
                             id: "bugprone-misplaced-widening-cast",
@@ -2969,12 +2993,36 @@
                             ),
                         },
                         Rule {
+                            id: "bugprone-posix-return",
+                            class: WrongOperator,
+                            reason: "a POSIX call that returns an error number compared with < 0 (it never is), so the error check never fires (LX-CAR-1: its fix-it is carried)",
+                            off: None,
+                        },
+                        Rule {
                             id: "bugprone-signed-char-misuse",
                             class: Overflow,
                             reason: "a signed char converted to a wider integer: negative values sign-extend",
                             off: Some(
                                 "precision 1/10 on the C/C++ precision corpus (10 findings, with the image's system headers): the converted values are ASCII, small table entries or bytes read as signed on purpose",
                             ),
+                        },
+                        Rule {
+                            id: "bugprone-suspicious-memset-usage",
+                            class: WrongOperator,
+                            reason: "memset with its value and size swapped, a fill value of '0' or one that does not fit a byte: the buffer is not set as meant (LX-CAR-1: its fix-it is carried)",
+                            off: None,
+                        },
+                        Rule {
+                            id: "bugprone-suspicious-semicolon",
+                            class: WrongOperator,
+                            reason: "a semicolon right after if, for or while: the body below runs unconditionally or once (LX-CAR-1: its fix-it is carried)",
+                            off: None,
+                        },
+                        Rule {
+                            id: "bugprone-suspicious-string-compare",
+                            class: WrongOperator,
+                            reason: "strcmp used as a boolean: the condition is true when the strings differ, the opposite of what it reads like (LX-CAR-1: reported; its fix-it, an added != 0, keeps the behaviour and so would hide the defect, and is not carried)",
+                            off: None,
                         },
                         Rule {
                             id: "bugprone-too-small-loop-variable",
@@ -3225,6 +3273,12 @@
         refusals: [],
         defects: [
             Rule {
+                id: "bugprone-bool-pointer-implicit-conversion",
+                class: WrongOperator,
+                reason: "a pointer to bool used as a condition: the test checks the pointer, not the value it points to (LX-CAR-1: its fix-it is carried)",
+                off: None,
+            },
+            Rule {
                 id: "bugprone-branch-clone",
                 class: WrongOperator,
                 reason: "identical branches of an if/else chain or switch: a copy-paste or wrong-branch error",
@@ -3253,12 +3307,30 @@
                 ),
             },
             Rule {
+                id: "bugprone-inaccurate-erase",
+                class: WrongOperator,
+                reason: "erase(remove(...)) without the end iterator: only one element is erased instead of the removed range (LX-CAR-1: its fix-it is carried)",
+                off: None,
+            },
+            Rule {
                 id: "bugprone-infinite-loop",
                 class: WrongOperator,
                 reason: "a loop whose condition no statement in its body can change",
                 off: Some(
                     "one finding on the C/C++ precision corpus with the image's system headers (0/1: both loop variables change in the body), too few to overturn the earlier 0/14",
                 ),
+            },
+            Rule {
+                id: "bugprone-misplaced-operator-in-strlen-in-alloc",
+                class: OutOfBounds,
+                reason: "malloc(strlen(s + 1)): the + 1 is inside strlen, so the buffer is two bytes too small and the copy overflows it (LX-CAR-1: its fix-it is carried)",
+                off: None,
+            },
+            Rule {
+                id: "bugprone-misplaced-pointer-arithmetic-in-alloc",
+                class: OutOfBounds,
+                reason: "malloc(n) + k instead of malloc(n + k): the pointer is moved instead of the size grown, so writes run past the allocation (LX-CAR-1: its fix-it is carried)",
+                off: None,
             },
             Rule {
                 id: "bugprone-misplaced-widening-cast",
@@ -3275,12 +3347,36 @@
                 ),
             },
             Rule {
+                id: "bugprone-posix-return",
+                class: WrongOperator,
+                reason: "a POSIX call that returns an error number compared with < 0 (it never is), so the error check never fires (LX-CAR-1: its fix-it is carried)",
+                off: None,
+            },
+            Rule {
                 id: "bugprone-signed-char-misuse",
                 class: Overflow,
                 reason: "a signed char converted to a wider integer: negative values sign-extend",
                 off: Some(
                     "precision 1/10 on the C/C++ precision corpus (10 findings, with the image's system headers): the converted values are ASCII, small table entries or bytes read as signed on purpose",
                 ),
+            },
+            Rule {
+                id: "bugprone-suspicious-memset-usage",
+                class: WrongOperator,
+                reason: "memset with its value and size swapped, a fill value of '0' or one that does not fit a byte: the buffer is not set as meant (LX-CAR-1: its fix-it is carried)",
+                off: None,
+            },
+            Rule {
+                id: "bugprone-suspicious-semicolon",
+                class: WrongOperator,
+                reason: "a semicolon right after if, for or while: the body below runs unconditionally or once (LX-CAR-1: its fix-it is carried)",
+                off: None,
+            },
+            Rule {
+                id: "bugprone-suspicious-string-compare",
+                class: WrongOperator,
+                reason: "strcmp used as a boolean: the condition is true when the strings differ, the opposite of what it reads like (LX-CAR-1: reported; its fix-it, an added != 0, keeps the behaviour and so would hide the defect, and is not carried)",
+                off: None,
             },
             Rule {
                 id: "bugprone-too-small-loop-variable",
@@ -4991,6 +5087,256 @@
                 off: None,
             },
         ],
+        unordered: false,
+    },
+    Tool {
+        name: "shellcheck",
+        command: "sloptopop-shellcheck",
+        licence: "GPL-3.0-or-later",
+        licence_files: [
+            "https://github.com/koalaman/shellcheck/blob/v0.11.0/LICENSE",
+        ],
+        scope: Only(
+            Shell,
+        ),
+        kind: Run(
+            Image {
+                name: "analyzers/shellcheck",
+                version: "0.11.0-1",
+                digest: "sha256:b3662730c2f4c77161478cab22b1b4ae681d30e81f960861a7f3ca4da3023d76",
+                bytes: [
+                    37599939,
+                    38704738,
+                ],
+            },
+        ),
+        default: true,
+        args: [],
+        host: ImageOnly,
+        output: "shellcheck.sarif",
+        sink: Stdout,
+        findings: [],
+        convert: Some(
+            (
+                ShellcheckJson1(
+                    [
+                        Rule {
+                            id: "SC2006",
+                            class: ShellExpansion,
+                            reason: "a legacy backquoted command substitution, whose backslash and nesting rules silently change the command it runs",
+                            off: Some(
+                                "precision 0/12 on the shell precision corpus (12 findings): no backquoted command holds a backslash or a nested backquote, so $(...) runs the same command and the fix only modernises it",
+                            ),
+                        },
+                        Rule {
+                            id: "SC2046",
+                            class: ShellExpansion,
+                            reason: "an unquoted command substitution: its output is split into words and globbed",
+                            off: Some(
+                                "precision 0/7 on the shell precision corpus (7 findings): one-word outputs (uname -s, id -u) and lists of process ids that kill is meant to get as separate words",
+                            ),
+                        },
+                        Rule {
+                            id: "SC2050",
+                            class: WrongOperator,
+                            reason: "a comparison of two constants: the test always gives the same answer",
+                            off: None,
+                        },
+                        Rule {
+                            id: "SC2068",
+                            class: ShellExpansion,
+                            reason: "an unquoted $@ or array expansion: its elements are split again and globbed",
+                            off: Some(
+                                "three findings on the shell precision corpus, too few to measure; new to the table, so off",
+                            ),
+                        },
+                        Rule {
+                            id: "SC2086",
+                            class: ShellExpansion,
+                            reason: "an unquoted variable expansion: its value is split into words and globbed",
+                            off: Some(
+                                "precision 1/20 on the shell precision corpus (67 findings): values the script builds from constants, version numbers and fixed paths, with no blank or glob character in them; the hit is a script's own directory, which may have a space in its path",
+                            ),
+                        },
+                        Rule {
+                            id: "SC2115",
+                            class: ShellExpansion,
+                            reason: "rm -rf \"$var/\" with a variable that may be empty: it removes from the root",
+                            off: Some(
+                                "one finding on the shell precision corpus, too few to measure; new to the table, so off",
+                            ),
+                        },
+                        Rule {
+                            id: "SC2154",
+                            class: Uninitialised,
+                            reason: "a variable that is used but never assigned (a typo, or one the caller must set)",
+                            off: Some(
+                                "precision 0/13 on the shell precision corpus (13 findings): variables a helper function assigns with read, which ShellCheck does not follow",
+                            ),
+                        },
+                        Rule {
+                            id: "SC2155",
+                            class: UncheckedResult,
+                            reason: "local or export with a command substitution: the declaration's status masks the command's",
+                            off: Some(
+                                "precision 3/9 on the shell precision corpus (9 findings): the hits mask a failing command under set -e; the misses are in scripts that never check the status, or run uname",
+                            ),
+                        },
+                        Rule {
+                            id: "SC2164",
+                            class: ShellExpansion,
+                            reason: "cd without || exit: when it fails, the following commands run in the wrong directory",
+                            off: None,
+                        },
+                        Rule {
+                            id: "SC2181",
+                            class: UncheckedResult,
+                            reason: "$? tested instead of the command: a command run in between (a sleep, an echo) replaces the status checked",
+                            off: Some(
+                                "precision 4/20 on the shell precision corpus (21 findings): the hits test the status of a sleep run after the command; the misses test the command's own status, only indirectly",
+                            ),
+                        },
+                        Rule {
+                            id: "SC2193",
+                            class: WrongOperator,
+                            reason: "a comparison whose two sides can never be equal: the test is always false",
+                            off: None,
+                        },
+                    ],
+                ),
+                "shellcheck.txt",
+            ),
+        ),
+        env: [],
+        root_variable: None,
+        prepare: None,
+        data: None,
+        sarif_fixes: None,
+        refusals: [],
+        defects: [
+            Rule {
+                id: "SC2006",
+                class: ShellExpansion,
+                reason: "a legacy backquoted command substitution, whose backslash and nesting rules silently change the command it runs",
+                off: Some(
+                    "precision 0/12 on the shell precision corpus (12 findings): no backquoted command holds a backslash or a nested backquote, so $(...) runs the same command and the fix only modernises it",
+                ),
+            },
+            Rule {
+                id: "SC2046",
+                class: ShellExpansion,
+                reason: "an unquoted command substitution: its output is split into words and globbed",
+                off: Some(
+                    "precision 0/7 on the shell precision corpus (7 findings): one-word outputs (uname -s, id -u) and lists of process ids that kill is meant to get as separate words",
+                ),
+            },
+            Rule {
+                id: "SC2050",
+                class: WrongOperator,
+                reason: "a comparison of two constants: the test always gives the same answer",
+                off: None,
+            },
+            Rule {
+                id: "SC2068",
+                class: ShellExpansion,
+                reason: "an unquoted $@ or array expansion: its elements are split again and globbed",
+                off: Some(
+                    "three findings on the shell precision corpus, too few to measure; new to the table, so off",
+                ),
+            },
+            Rule {
+                id: "SC2086",
+                class: ShellExpansion,
+                reason: "an unquoted variable expansion: its value is split into words and globbed",
+                off: Some(
+                    "precision 1/20 on the shell precision corpus (67 findings): values the script builds from constants, version numbers and fixed paths, with no blank or glob character in them; the hit is a script's own directory, which may have a space in its path",
+                ),
+            },
+            Rule {
+                id: "SC2115",
+                class: ShellExpansion,
+                reason: "rm -rf \"$var/\" with a variable that may be empty: it removes from the root",
+                off: Some(
+                    "one finding on the shell precision corpus, too few to measure; new to the table, so off",
+                ),
+            },
+            Rule {
+                id: "SC2154",
+                class: Uninitialised,
+                reason: "a variable that is used but never assigned (a typo, or one the caller must set)",
+                off: Some(
+                    "precision 0/13 on the shell precision corpus (13 findings): variables a helper function assigns with read, which ShellCheck does not follow",
+                ),
+            },
+            Rule {
+                id: "SC2155",
+                class: UncheckedResult,
+                reason: "local or export with a command substitution: the declaration's status masks the command's",
+                off: Some(
+                    "precision 3/9 on the shell precision corpus (9 findings): the hits mask a failing command under set -e; the misses are in scripts that never check the status, or run uname",
+                ),
+            },
+            Rule {
+                id: "SC2164",
+                class: ShellExpansion,
+                reason: "cd without || exit: when it fails, the following commands run in the wrong directory",
+                off: None,
+            },
+            Rule {
+                id: "SC2181",
+                class: UncheckedResult,
+                reason: "$? tested instead of the command: a command run in between (a sleep, an echo) replaces the status checked",
+                off: Some(
+                    "precision 4/20 on the shell precision corpus (21 findings): the hits test the status of a sleep run after the command; the misses test the command's own status, only indirectly",
+                ),
+            },
+            Rule {
+                id: "SC2193",
+                class: WrongOperator,
+                reason: "a comparison whose two sides can never be equal: the test is always false",
+                off: None,
+            },
+        ],
+        unordered: false,
+    },
+    Tool {
+        name: "clippy",
+        command: "cargo",
+        licence: "MIT OR Apache-2.0",
+        licence_files: [
+            "https://github.com/rust-lang/rust/blob/1.99.0/src/tools/clippy/LICENSE-APACHE",
+            "https://github.com/rust-lang/rust/blob/1.99.0/src/tools/clippy/LICENSE-MIT",
+        ],
+        scope: Only(
+            Rust,
+        ),
+        kind: Documented,
+        default: true,
+        args: [
+            Fixed(
+                "clippy",
+            ),
+            Fixed(
+                "--message-format=json",
+            ),
+        ],
+        host: Same,
+        output: "clippy.sarif",
+        sink: Stdout,
+        findings: [],
+        convert: Some(
+            (
+                RustcJson,
+                "clippy.json",
+            ),
+        ),
+        env: [],
+        root_variable: None,
+        prepare: None,
+        data: None,
+        sarif_fixes: None,
+        refusals: [],
+        defects: [],
         unordered: false,
     },
     Tool {

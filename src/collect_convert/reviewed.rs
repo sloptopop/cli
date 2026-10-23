@@ -43,6 +43,14 @@ pub(crate) fn reviewed(tool: &str, version: &str, rule: &str, level: Level) -> b
     rows(REVIEWED).any(|row| row.get(..wanted.len()) == Some(wanted.as_slice()))
 }
 
+/// Whether the table lists `tool` at `version` and `rule` at any level,
+/// switched on.
+pub(crate) fn reviewed_rule(tool: &str, version: &str, rule: &str) -> bool {
+    let wanted = [tool, upstream(version), rule];
+    rows(REVIEWED)
+        .any(|row| row.get(..wanted.len()) == Some(wanted.as_slice()) && row.get(4) == Some(&"on"))
+}
+
 /// Biome's own fix kind for the rule `category`, if Biome is the version
 /// the kinds come from.
 pub(crate) fn biome_kind(version: &str, category: &str) -> Option<Level> {

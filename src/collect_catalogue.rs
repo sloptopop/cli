@@ -7,7 +7,7 @@
 //! The flags are fixed so that output is complete (no caps on the number
 //! of issues), offline (the vulnerability data is a mounted snapshot), and
 //! stable from run to run. Copyleft tools (Opengrep, Semgrep,
-//! golangci-lint, Pylint, the LGPL Sonar analyzers, Cppcheck) are only ever started
+//! golangci-lint, Pylint, the LGPL Sonar analyzers, Cppcheck, `ShellCheck`) are only ever started
 //! as separate processes; nothing here links a tool. Every licence was read
 //! from the tool's licence file, whose address each entry records, never
 //! only from registry metadata.
@@ -17,7 +17,7 @@
 //! below are the digests the component library serves (D-0184). The
 //! catalogue is the signed index: it ships inside the signed release.
 //!
-//! The C and C++ analyzers report only the defect rules listed in
+//! The C, C++ and shell analyzers report only the defect rules listed in
 //! [`defects`], each with its defect class; the other languages' analyzers
 //! tag the defect rules listed in [`lint_defects`] and drop the findings of
 //! those that are off.
@@ -1082,7 +1082,9 @@ pub(crate) const CATALOGUE: &[Tool] = &[
     // mapped to the mounted checkout in a copy), else every C file as C17
     // and every C++ file as C++17 with `-I. -Iinclude`; always for
     // x86_64-linux-gnu, whatever the host. Its errors (files that do not
-    // compile) stay in the report as tool execution notifications.
+    // compile) stay in the report as tool execution notifications. After
+    // the diagnostics it prints the fixes clang-tidy exported
+    // (--export-fixes); collect carries those of the reviewed checks.
     Tool {
         name: "clang-tidy",
         command: "sloptopop-clang-tidy",
@@ -1093,9 +1095,9 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         scope: Scope::Only(Ecosystem::Cpp),
         kind: Kind::Run(Image {
             name: "analyzers/clang-tidy",
-            version: "19.1.0-2",
-            digest: "sha256:833f1f4c382810c0871890e591695cd39fcc86a105e30fa569d9f3b40f76f0ba",
-            bytes: [72_901_945, 73_006_021],
+            version: "19.1.0-3",
+            digest: "sha256:ec2be504f104269e4439b5b3aaa57505de1f021ad5f962388e7281fbb32be240",
+            bytes: [72_902_143, 73_006_219],
         }),
         args: &[Fixed(defects::CLANG_TIDY_CHECKS)],
         host: Host::ImageOnly,
@@ -1141,6 +1143,54 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         convert: Some((Converter::Cppcheck(defects::CPPCHECK_RULES), "cppcheck.txt")),
         root_variable: Some("SLOPTOPOP_HOST_ROOT"),
         defects: defects::CPPCHECK_RULES,
+        ..PLAIN
+    },
+    // ShellCheck 0.11.0 (GPL-3.0-or-later, a separate process) as Debian
+    // builds it. The image's wrapper finds the shell scripts (*.sh, *.bash
+    // and files whose shebang runs a Bourne shell), checks each one in the
+    // dialect its shell directive, shebang or name states, else as POSIX
+    // sh, following sourced files, and prints one json1 report per file;
+    // collect keeps the defect rules, each with its class, and the fixes
+    // ShellCheck reports.
+    Tool {
+        name: "shellcheck",
+        command: "sloptopop-shellcheck",
+        licence: "GPL-3.0-or-later",
+        licence_files: &["https://github.com/koalaman/shellcheck/blob/v0.11.0/LICENSE"],
+        scope: Scope::Only(Ecosystem::Shell),
+        kind: Kind::Run(Image {
+            name: "analyzers/shellcheck",
+            version: "0.11.0-1",
+            digest: "sha256:b3662730c2f4c77161478cab22b1b4ae681d30e81f960861a7f3ca4da3023d76",
+            bytes: [37_599_939, 38_704_738],
+        }),
+        host: Host::ImageOnly,
+        output: "shellcheck.sarif",
+        sink: Sink::Stdout,
+        convert: Some((
+            Converter::ShellcheckJson1(defects::SHELLCHECK_RULES),
+            "shellcheck.txt",
+        )),
+        defects: defects::SHELLCHECK_RULES,
+        ..PLAIN
+    },
+    // Clippy: documented only, never run by collect. It needs the
+    // project's build, so it runs on the client (D-LX-08), through
+    // `sloptopop local evidence --rerun` (LX-CAR-4); collect converts its
+    // recorded JSON, keeping the machine-applicable suggestions.
+    Tool {
+        name: "clippy",
+        command: "cargo",
+        licence: "MIT OR Apache-2.0",
+        licence_files: &[
+            "https://github.com/rust-lang/rust/blob/1.99.0/src/tools/clippy/LICENSE-APACHE",
+            "https://github.com/rust-lang/rust/blob/1.99.0/src/tools/clippy/LICENSE-MIT",
+        ],
+        scope: Scope::Only(Ecosystem::Rust),
+        args: &[Fixed("clippy"), Fixed("--message-format=json")],
+        output: "clippy.sarif",
+        sink: Sink::Stdout,
+        convert: Some((Converter::RustcJson, "clippy.json")),
         ..PLAIN
     },
     // Coverage producers: documented only, never run.

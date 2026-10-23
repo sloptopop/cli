@@ -57,20 +57,53 @@ fn a_fix_is_reviewed_only_for_its_tool_version_rule_and_level() {
 }
 
 #[test]
+fn a_rule_is_reviewed_at_any_level_for_its_tool_and_version() {
+    assert!(reviewed_rule(
+        "clang-tidy",
+        "19.1.0-3",
+        "bugprone-misplaced-operator-in-strlen-in-alloc"
+    ));
+    assert!(reviewed_rule("shellcheck", "0.11.0-1", "SC2086"));
+    assert!(
+        !reviewed_rule(
+            "clang-tidy",
+            "19.1.0-3",
+            "bugprone-suspicious-string-compare"
+        ),
+        "a style fix: not reviewed (Q-6)"
+    );
+    assert!(
+        !reviewed_rule("clang-tidy", "20.1.0-1", "bugprone-suspicious-semicolon"),
+        "another version"
+    );
+    assert!(
+        !reviewed_rule("shellcheck", "0.11.0-1", "bugprone-suspicious-semicolon"),
+        "another tool"
+    );
+}
+
+#[test]
 fn every_table_row_is_well_formed() {
     for row in rows(REVIEWED) {
         let [tool, version, rule, level, state, note] = row.as_slice() else {
             panic!("{row:?}");
         };
         assert!(
-            ["ruff", "eslint-sonarjs", "biome"].contains(tool),
+            [
+                "ruff",
+                "eslint-sonarjs",
+                "biome",
+                "shellcheck",
+                "clang-tidy"
+            ]
+            .contains(tool),
             "{row:?}"
         );
         assert!(!version.is_empty() && !rule.is_empty() && !note.is_empty());
         assert_eq!(*level, "safe", "only safe fixes are reviewed: {row:?}");
         assert!(["on", "off"].contains(state), "{row:?}");
     }
-    assert_eq!(rows(REVIEWED).count(), 35);
+    assert_eq!(rows(REVIEWED).count(), 45);
     for row in rows(BIOME_KINDS) {
         assert!(
             matches!(row.as_slice(), [rule, "safe" | "unsafe"] if rule.starts_with("lint/")),

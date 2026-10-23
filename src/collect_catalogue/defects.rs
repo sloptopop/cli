@@ -1,6 +1,6 @@
-//! The defect rules of the C and C++ analyzers: every clang-tidy check and
-//! Cppcheck id `collect` reports, each with its defect class and what it
-//! finds. A rule the precision study found below the budget (sample
+//! The defect rules of the C, C++ and shell analyzers: every clang-tidy
+//! check, Cppcheck id and `ShellCheck` code `collect` reports, each with its
+//! defect class and what it finds. A rule the precision study found below the budget (sample
 //! precision below 0.80 on the C/C++ precision corpus, for a rule with five
 //! findings or more there) stays listed, `off`, with the reason: clang-tidy
 //! does not run it, and Cppcheck's findings of it are dropped. A rule with
@@ -17,13 +17,19 @@ use crate::collect_convert::{Defect, Rule};
 /// reported check of [`CLANG_TIDY_RULES`] (the catalogue tests keep the
 /// two equal). The Clang Static Analyzer's modeling checkers, which report
 /// nothing themselves, are enabled with the checkers that depend on them.
-pub(super) const CLANG_TIDY_CHECKS: &str = "-*,bugprone-dangling-handle,bugprone-empty-catch,bugprone-misplaced-widening-cast,bugprone-too-small-loop-variable,bugprone-unchecked-optional-access,bugprone-unused-return-value,bugprone-use-after-move,clang-analyzer-core.BitwiseShift,clang-analyzer-core.CallAndMessage,clang-analyzer-core.DivideZero,clang-analyzer-core.NonNullParamChecker,clang-analyzer-core.NullDereference,clang-analyzer-core.StackAddressEscape,clang-analyzer-core.UndefinedBinaryOperatorResult,clang-analyzer-core.VLASize,clang-analyzer-core.uninitialized.ArraySubscript,clang-analyzer-core.uninitialized.Assign,clang-analyzer-core.uninitialized.Branch,clang-analyzer-core.uninitialized.CapturedBlockVariable,clang-analyzer-core.uninitialized.NewArraySize,clang-analyzer-core.uninitialized.UndefReturn,clang-analyzer-cplusplus.ArrayDelete,clang-analyzer-cplusplus.InnerPointer,clang-analyzer-cplusplus.Move,clang-analyzer-cplusplus.NewDelete,clang-analyzer-cplusplus.NewDeleteLeaks,clang-analyzer-cplusplus.PlacementNew,clang-analyzer-cplusplus.PureVirtualCall,clang-analyzer-cplusplus.StringChecker,clang-analyzer-unix.API,clang-analyzer-unix.BlockInCriticalSection,clang-analyzer-unix.Errno,clang-analyzer-unix.MallocSizeof,clang-analyzer-unix.MismatchedDeallocator,clang-analyzer-unix.StdCLibraryFunctions,clang-analyzer-unix.Vfork,clang-analyzer-unix.cstring.BadSizeArg,clang-analyzer-unix.cstring.NullArg";
+pub(super) const CLANG_TIDY_CHECKS: &str = "-*,bugprone-bool-pointer-implicit-conversion,bugprone-dangling-handle,bugprone-empty-catch,bugprone-inaccurate-erase,bugprone-misplaced-operator-in-strlen-in-alloc,bugprone-misplaced-pointer-arithmetic-in-alloc,bugprone-misplaced-widening-cast,bugprone-posix-return,bugprone-suspicious-memset-usage,bugprone-suspicious-semicolon,bugprone-suspicious-string-compare,bugprone-too-small-loop-variable,bugprone-unchecked-optional-access,bugprone-unused-return-value,bugprone-use-after-move,clang-analyzer-core.BitwiseShift,clang-analyzer-core.CallAndMessage,clang-analyzer-core.DivideZero,clang-analyzer-core.NonNullParamChecker,clang-analyzer-core.NullDereference,clang-analyzer-core.StackAddressEscape,clang-analyzer-core.UndefinedBinaryOperatorResult,clang-analyzer-core.VLASize,clang-analyzer-core.uninitialized.ArraySubscript,clang-analyzer-core.uninitialized.Assign,clang-analyzer-core.uninitialized.Branch,clang-analyzer-core.uninitialized.CapturedBlockVariable,clang-analyzer-core.uninitialized.NewArraySize,clang-analyzer-core.uninitialized.UndefReturn,clang-analyzer-cplusplus.ArrayDelete,clang-analyzer-cplusplus.InnerPointer,clang-analyzer-cplusplus.Move,clang-analyzer-cplusplus.NewDelete,clang-analyzer-cplusplus.NewDeleteLeaks,clang-analyzer-cplusplus.PlacementNew,clang-analyzer-cplusplus.PureVirtualCall,clang-analyzer-cplusplus.StringChecker,clang-analyzer-unix.API,clang-analyzer-unix.BlockInCriticalSection,clang-analyzer-unix.Errno,clang-analyzer-unix.MallocSizeof,clang-analyzer-unix.MismatchedDeallocator,clang-analyzer-unix.StdCLibraryFunctions,clang-analyzer-unix.Vfork,clang-analyzer-unix.cstring.BadSizeArg,clang-analyzer-unix.cstring.NullArg";
 
 /// clang-tidy 19.1.0: the `clang-analyzer-core`, `-cplusplus`, `-deadcode`
 /// and `-unix` families (without `core.NonnilStringConstants`, which is
 /// Objective-C only, and the modeling checkers), and the bugprone checks
 /// for the same classes.
 pub(super) const CLANG_TIDY_RULES: &[Rule] = &[
+    Rule {
+        id: "bugprone-bool-pointer-implicit-conversion",
+        class: Defect::WrongOperator,
+        reason: "a pointer to bool used as a condition: the test checks the pointer, not the value it points to (LX-CAR-1: its fix-it is carried)",
+        off: None,
+    },
     Rule {
         id: "bugprone-branch-clone",
         class: Defect::WrongOperator,
@@ -53,12 +59,30 @@ pub(super) const CLANG_TIDY_RULES: &[Rule] = &[
         ),
     },
     Rule {
+        id: "bugprone-inaccurate-erase",
+        class: Defect::WrongOperator,
+        reason: "erase(remove(...)) without the end iterator: only one element is erased instead of the removed range (LX-CAR-1: its fix-it is carried)",
+        off: None,
+    },
+    Rule {
         id: "bugprone-infinite-loop",
         class: Defect::WrongOperator,
         reason: "a loop whose condition no statement in its body can change",
         off: Some(
             "one finding on the C/C++ precision corpus with the image's system headers (0/1: both loop variables change in the body), too few to overturn the earlier 0/14",
         ),
+    },
+    Rule {
+        id: "bugprone-misplaced-operator-in-strlen-in-alloc",
+        class: Defect::OutOfBounds,
+        reason: "malloc(strlen(s + 1)): the + 1 is inside strlen, so the buffer is two bytes too small and the copy overflows it (LX-CAR-1: its fix-it is carried)",
+        off: None,
+    },
+    Rule {
+        id: "bugprone-misplaced-pointer-arithmetic-in-alloc",
+        class: Defect::OutOfBounds,
+        reason: "malloc(n) + k instead of malloc(n + k): the pointer is moved instead of the size grown, so writes run past the allocation (LX-CAR-1: its fix-it is carried)",
+        off: None,
     },
     Rule {
         id: "bugprone-misplaced-widening-cast",
@@ -75,12 +99,36 @@ pub(super) const CLANG_TIDY_RULES: &[Rule] = &[
         ),
     },
     Rule {
+        id: "bugprone-posix-return",
+        class: Defect::WrongOperator,
+        reason: "a POSIX call that returns an error number compared with < 0 (it never is), so the error check never fires (LX-CAR-1: its fix-it is carried)",
+        off: None,
+    },
+    Rule {
         id: "bugprone-signed-char-misuse",
         class: Defect::Overflow,
         reason: "a signed char converted to a wider integer: negative values sign-extend",
         off: Some(
             "precision 1/10 on the C/C++ precision corpus (10 findings, with the image's system headers): the converted values are ASCII, small table entries or bytes read as signed on purpose",
         ),
+    },
+    Rule {
+        id: "bugprone-suspicious-memset-usage",
+        class: Defect::WrongOperator,
+        reason: "memset with its value and size swapped, a fill value of '0' or one that does not fit a byte: the buffer is not set as meant (LX-CAR-1: its fix-it is carried)",
+        off: None,
+    },
+    Rule {
+        id: "bugprone-suspicious-semicolon",
+        class: Defect::WrongOperator,
+        reason: "a semicolon right after if, for or while: the body below runs unconditionally or once (LX-CAR-1: its fix-it is carried)",
+        off: None,
+    },
+    Rule {
+        id: "bugprone-suspicious-string-compare",
+        class: Defect::WrongOperator,
+        reason: "strcmp used as a boolean: the condition is true when the strings differ, the opposite of what it reads like (LX-CAR-1: reported; its fix-it, an added != 0, keeps the behaviour and so would hide the defect, and is not carried)",
+        off: None,
     },
     Rule {
         id: "bugprone-too-small-loop-variable",
@@ -1030,6 +1078,94 @@ pub(super) const CPPCHECK_RULES: &[Rule] = &[
         id: "zerodivcond",
         class: Defect::DivisionByZero,
         reason: "a division by a value an earlier or later check says can be zero",
+        off: None,
+    },
+];
+
+/// `ShellCheck` 0.11.0: the codes of the defect classes (`docs/collect.md`);
+/// its other comments (style advice, syntax and portability notes) are
+/// dropped.
+pub(super) const SHELLCHECK_RULES: &[Rule] = &[
+    Rule {
+        id: "SC2006",
+        class: Defect::ShellExpansion,
+        reason: "a legacy backquoted command substitution, whose backslash and nesting rules silently change the command it runs",
+        off: Some(
+            "precision 0/12 on the shell precision corpus (12 findings): no backquoted command holds a backslash or a nested backquote, so $(...) runs the same command and the fix only modernises it",
+        ),
+    },
+    Rule {
+        id: "SC2046",
+        class: Defect::ShellExpansion,
+        reason: "an unquoted command substitution: its output is split into words and globbed",
+        off: Some(
+            "precision 0/7 on the shell precision corpus (7 findings): one-word outputs (uname -s, id -u) and lists of process ids that kill is meant to get as separate words",
+        ),
+    },
+    Rule {
+        id: "SC2050",
+        class: Defect::WrongOperator,
+        reason: "a comparison of two constants: the test always gives the same answer",
+        off: None,
+    },
+    Rule {
+        id: "SC2068",
+        class: Defect::ShellExpansion,
+        reason: "an unquoted $@ or array expansion: its elements are split again and globbed",
+        off: Some(
+            "three findings on the shell precision corpus, too few to measure; new to the table, so off",
+        ),
+    },
+    Rule {
+        id: "SC2086",
+        class: Defect::ShellExpansion,
+        reason: "an unquoted variable expansion: its value is split into words and globbed",
+        off: Some(
+            "precision 1/20 on the shell precision corpus (67 findings): values the script builds from constants, version numbers and fixed paths, with no blank or glob character in them; the hit is a script's own directory, which may have a space in its path",
+        ),
+    },
+    Rule {
+        id: "SC2115",
+        class: Defect::ShellExpansion,
+        reason: "rm -rf \"$var/\" with a variable that may be empty: it removes from the root",
+        off: Some(
+            "one finding on the shell precision corpus, too few to measure; new to the table, so off",
+        ),
+    },
+    Rule {
+        id: "SC2154",
+        class: Defect::Uninitialised,
+        reason: "a variable that is used but never assigned (a typo, or one the caller must set)",
+        off: Some(
+            "precision 0/13 on the shell precision corpus (13 findings): variables a helper function assigns with read, which ShellCheck does not follow",
+        ),
+    },
+    Rule {
+        id: "SC2155",
+        class: Defect::UncheckedResult,
+        reason: "local or export with a command substitution: the declaration's status masks the command's",
+        off: Some(
+            "precision 3/9 on the shell precision corpus (9 findings): the hits mask a failing command under set -e; the misses are in scripts that never check the status, or run uname",
+        ),
+    },
+    Rule {
+        id: "SC2164",
+        class: Defect::ShellExpansion,
+        reason: "cd without || exit: when it fails, the following commands run in the wrong directory",
+        off: None,
+    },
+    Rule {
+        id: "SC2181",
+        class: Defect::UncheckedResult,
+        reason: "$? tested instead of the command: a command run in between (a sleep, an echo) replaces the status checked",
+        off: Some(
+            "precision 4/20 on the shell precision corpus (21 findings): the hits test the status of a sleep run after the command; the misses test the command's own status, only indirectly",
+        ),
+    },
+    Rule {
+        id: "SC2193",
+        class: Defect::WrongOperator,
+        reason: "a comparison whose two sides can never be equal: the test is always false",
         off: None,
     },
 ];

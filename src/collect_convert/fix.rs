@@ -88,6 +88,9 @@ pub(crate) enum Drop {
     Config,
     /// A level, or a format, this converter does not know.
     Unconverted,
+    /// A fix of a rule the reviewed fix table does not list, from a tool
+    /// whose fixes are carried only for reviewed rules (clang-tidy).
+    Unreviewed,
 }
 
 impl Drop {
@@ -109,6 +112,7 @@ impl Drop {
             Self::Path => "fix.path",
             Self::Config => "fix.config",
             Self::Unconverted => "fix.unconverted",
+            Self::Unreviewed => "fix.unreviewed",
         }
     }
 }
@@ -218,6 +222,30 @@ impl Source {
         } else {
             Err(Drop::OutOfRange)
         }
+    }
+
+    /// The 1-based line and byte column of the 0-based byte `offset` (how
+    /// clang counts), if it is in the file.
+    pub(crate) fn position(&self, offset: u64) -> Option<(u64, u64)> {
+        let offset = usize::try_from(offset).unwrap_or(usize::MAX);
+        if offset > self.bytes.len() {
+            return None;
+        }
+        // `starts` begins with line 1's 0, so `line` is at least 1 and its
+        // start at most `offset`.
+        let line = self.starts.partition_point(|&start| start <= offset);
+        let start = self
+            .starts
+            .get(..line)
+            .and_then(<[usize]>::last)
+            .copied()
+            .unwrap_or_default();
+        Some((
+            u64::try_from(line).unwrap_or(u64::MAX),
+            u64::try_from(offset - start)
+                .unwrap_or(u64::MAX)
+                .saturating_add(1),
+        ))
     }
 
     /// A 0-based byte offset, checked against the file.

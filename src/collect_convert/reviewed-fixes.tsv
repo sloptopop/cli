@@ -6,6 +6,15 @@
 # Seeded 2026-10-21 from the safe fixes the pinned tools reported on the
 # 21-repo public corpus. Owner defaults, switchable (set the state to `off`):
 # useImportType, noTsIgnore and I001 are `on` (decision O-1, recommended).
+# LX-CAR-1 (2026-10-23) added ShellCheck's three fixes the owner reviewed
+# (Q-5: SC2006 safe; SC2086 and SC2164 only where the project's tests pass,
+# which the server enforces) and the clang-tidy defect checks whose fix-its
+# fix the defect; a fix-it that only restates the code (suspicious-string-
+# compare's explicit `!= 0`) is a style change and is not listed (Q-6).
+# SC2006 and SC2086 are below the precision budget and off (docs/collect.md,
+# "Shell: ShellCheck"), so their fixes are carried only once a rule is on.
+# clang-tidy fixes of checks not listed here are not carried at all; until
+# DR-LOC-1, build-needing tools' fixes are planned MANUAL (D-LX-08).
 # Columns: tool (catalogue name), version, rule, level, state (on | off), note.
 ruff	0.17.1	UP045	safe	on	corpus
 ruff	0.17.1	UP006	safe	on	corpus
@@ -42,3 +51,13 @@ biome	2.5.15	lint/style/useExponentiationOperator	safe	on	corpus
 biome	2.5.15	lint/style/useExportType	safe	on	corpus
 biome	2.5.15	lint/style/useImportType	safe	on	owner default O-1, switchable: can break decorator metadata and imports kept for side effects
 biome	2.5.15	lint/suspicious/noTsIgnore	safe	on	owner default O-1, switchable: @ts-expect-error fails (TS2578) where nothing is suppressed
+shellcheck	0.11.0	SC2006	safe	on	owner Q-5: safe. `...` becomes $(...) with the same text; a fix whose backquoted text holds a backslash is carried as unsafe, never reviewed, because the backslash rules differ
+shellcheck	0.11.0	SC2086	safe	on	owner Q-5: planned only when the project's tests pass. Quoting stops word splitting and globbing; a value meant to split into several words would change meaning
+shellcheck	0.11.0	SC2164	safe	on	owner Q-5: planned only when the project's tests pass. `|| exit` after cd: a failed cd stops the script instead of running on in the wrong directory
+clang-tidy	19.1.0	bugprone-bool-pointer-implicit-conversion	safe	on	the condition tests the pointed-to bool instead of the pointer
+clang-tidy	19.1.0	bugprone-inaccurate-erase	safe	on	erase gets the end iterator, so the whole removed range goes
+clang-tidy	19.1.0	bugprone-misplaced-operator-in-strlen-in-alloc	safe	on	strlen(s + 1) becomes strlen(s) + 1: the buffer grows to what is written into it; nothing else changes
+clang-tidy	19.1.0	bugprone-misplaced-pointer-arithmetic-in-alloc	safe	on	the offset moves into the size: the allocation is large enough and the pointer is the one malloc returned
+clang-tidy	19.1.0	bugprone-posix-return	safe	on	the error test compares with > 0, the only values the call reports errors with
+clang-tidy	19.1.0	bugprone-suspicious-memset-usage	safe	on	memset gets the fill value and size it was meant to (0 for '0', arguments in order)
+clang-tidy	19.1.0	bugprone-suspicious-semicolon	safe	on	the stray semicolon goes, so the indented body is the statement's body again
