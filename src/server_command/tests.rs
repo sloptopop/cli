@@ -53,7 +53,7 @@ fn the_request_is_shown_confirmed_and_posted() {
         "written by curl"
     );
     assert!(
-        stderr.contains("sloptopop transform will upload to http://ok.test/v1/transform:"),
+        stderr.contains("sloptopop transform will upload to http://ok.test/v1/jobs:"),
         "{stderr}"
     );
     assert!(stderr.contains("Upload? [y/N] "), "asked");
@@ -83,7 +83,7 @@ fn nothing_goes_without_a_yes_curl_or_a_server() {
     let (refused, said) = run(&fake_local(), &root, "http://refuses.test", true, b"");
     assert_eq!(refused, Err(UPLOAD_ERROR), "refused");
     assert!(
-        said.contains("every slot is taken")
+        said.contains("the queue is full")
             && said.contains("hint: sloptopop detects only on its server"),
         "{stderr}"
     );
@@ -121,7 +121,7 @@ fn nothing_goes_without_a_yes_curl_or_a_server() {
         "the hosted default is not reachable from the fake"
     );
     assert!(
-        String::from_utf8_lossy(&sink).contains("https://api.sloptopop.dev/v1/transform"),
+        String::from_utf8_lossy(&sink).contains("https://api.sloptopop.dev/v1/jobs"),
         "the default server"
     );
 }

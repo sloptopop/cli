@@ -52,7 +52,7 @@ pub(crate) fn fake_local() -> Locator {
         explicit: Some(OsString::from(FAKE_LOCAL)),
         exe_dir: None,
         path: Some(OsString::from(CURL_DIR)),
-        vars: Vec::new(),
+        ..Locator::default()
     }
 }
 

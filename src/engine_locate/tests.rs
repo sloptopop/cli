@@ -12,6 +12,8 @@ fn explicit_engine_wins() {
         exe_dir: Some(env::temp_dir()),
         path: Some(OsString::from("/usr/bin")),
         vars: Vec::new(),
+        terminal: false,
+        poll: Duration::ZERO,
     };
     assert_eq!(
         locator.locate(),
@@ -31,7 +33,7 @@ fn next_to_the_executable_comes_before_path() {
         explicit: None,
         exe_dir: Some(exe_dir.0.clone()),
         path: Some(path),
-        vars: Vec::new(),
+        ..Locator::default()
     };
     assert_eq!(
         locator.locate(),
@@ -57,6 +59,13 @@ fn process_locator_reads_the_environment() {
     let locator = Locator::from_process();
     assert_eq!(locator.path, env::var_os("PATH"), "PATH");
     assert!(locator.exe_dir.is_some(), "test binary directory");
+    assert_eq!(locator.poll, POLL_EVERY, "every 2 s at first");
+    assert_eq!(POLL_EVERY, Duration::from_secs(2), "2 s");
+    assert_eq!(
+        locator.terminal,
+        io::stderr().is_terminal(),
+        "whether stderr is a terminal"
+    );
 }
 
 #[test]

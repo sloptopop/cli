@@ -15,13 +15,13 @@ fn the_manifest_says_what_is_sent_and_what_is_not() {
                                {"path": "link", "reason": "symbolic link"}]}
     });
     assert_eq!(
-        manifest(&full, "https://backend.example/v1/transform"),
-        "sloptopop transform will upload to https://backend.example/v1/transform:\n  10 files, 2515 bytes of text (request: 7586 bytes), 2 analyzer report(s) and .sloptopop/context.json\n  analyzer report not uploaded: bad.sarif (a SARIF report that is not JSON)\n  2 secret value(s) masked before upload (in src/pay.ts)\n  2 file(s) not uploaded: 1 not UTF-8 text; 1 symbolic link\n    logo.png (not UTF-8 text)\n    link (symbolic link)\n",
+        manifest(&full, "https://backend.example/v1/jobs"),
+        "sloptopop transform will upload to https://backend.example/v1/jobs:\n  10 files, 2515 bytes of text (request: 7586 bytes), 2 analyzer report(s) and .sloptopop/context.json\n  analyzer report not uploaded: bad.sarif (a SARIF report that is not JSON)\n  2 secret value(s) masked before upload (in src/pay.ts)\n  2 file(s) not uploaded: 1 not UTF-8 text; 1 symbolic link\n    logo.png (not UTF-8 text)\n    link (symbolic link)\n",
         "full"
     );
     assert_eq!(
-        manifest(&json!({}), "http://192.0.2.10:8080/v1/transform"),
-        "sloptopop will upload to http://192.0.2.10:8080/v1/transform:\n  0 files, 0 bytes of text (request: 0 bytes), 0 analyzer report(s)\n  0 secret value(s) masked before upload\n  0 file(s) not uploaded\n",
+        manifest(&json!({}), "http://192.0.2.10:8080/v1/jobs"),
+        "sloptopop will upload to http://192.0.2.10:8080/v1/jobs:\n  0 files, 0 bytes of text (request: 0 bytes), 0 analyzer report(s)\n  0 secret value(s) masked before upload\n  0 file(s) not uploaded\n",
         "empty"
     );
 }

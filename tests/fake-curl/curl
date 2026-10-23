@@ -1,27 +1,58 @@
 #!/bin/sh
 # Fake curl for the cli tests: no network. Echoes its arguments to stderr,
-# copies the posted file (--data-binary @<file>) to <file>.posted, and
-# answers by the URL's host:
-#   ok       writes {"answered":true} to --output, exit 0
+# logs "<method> <url>" to fake-curl.log next to its --output file, copies
+# a posted file (--data-binary @<file>) to <file>.posted, and answers by
+# the URL's host:
+#   ok       POST: a queued job {"id":"j1",...,"statusUrl":"/v1/jobs/j1"};
+#            GET: the next line of fake-curl.script next to --output (the
+#            last line repeats), or a done job answering {"answered":true}
+#            without a script; a line "!<body>" answers <body> with HTTP 404
+#            (exit 22), a line "x" fails to connect (exit 7); DELETE:
+#            nothing, exit 0
+#   odd      answers {} to everything, exit 0
 #   refuses  writes a JSON error to --output, exit 22 (--fail-with-body)
 #   down     writes nothing, exit 7 (could not connect)
 echo "fake-curl: $*" >&2
 out=
 data=
 url=
+method=GET
 while [ $# -gt 0 ]; do
   case $1 in
     --output) out=$2; shift ;;
-    --data-binary) data=${2#@}; shift ;;
+    --data-binary) data=${2#@}; method=POST; shift ;;
+    --request) method=$2; shift ;;
     --proto|--header|--user-agent) shift ;;
     -*) ;;
     *) url=$1 ;;
   esac
   shift
 done
+dir=$(dirname "$out")
+echo "$method $url" >> "$dir/fake-curl.log"
 [ -n "$data" ] && cp "$data" "$data.posted"
 case $url in
-  http://ok*|https://ok*) printf '%s' '{"answered":true}' > "$out"; exit 0 ;;
-  http://refuses*) printf '%s' '{"error":{"code":"busy","message":"every slot is taken"}}' > "$out"; echo "curl: (22) The requested URL returned error: 503" >&2; exit 22 ;;
+  http://ok*|https://ok*) ;;
+  http://odd*) printf '%s' '{}' > "$out"; exit 0 ;;
+  http://refuses*) printf '%s' '{"error":{"code":"queue-full","message":"the queue is full (200 jobs); retry later"}}' > "$out"; echo "curl: (22) The requested URL returned error: 503" >&2; exit 22 ;;
   *) echo "curl: (7) Failed to connect" >&2; exit 7 ;;
 esac
+case $method in
+  POST) printf '%s' '{"id":"j1","position":0,"statusUrl":"/v1/jobs/j1"}' > "$out"; exit 0 ;;
+  DELETE) : > "$out"; exit 0 ;;
+esac
+script="$dir/fake-curl.script"
+if [ ! -f "$script" ]; then
+  printf '%s' '{"state":"done","response":{"answered":true}}' > "$out"
+  exit 0
+fi
+count="$dir/fake-curl.count"
+n=$(( $(cat "$count" 2>/dev/null || echo 0) + 1 ))
+echo "$n" > "$count"
+answer=$(sed -n "${n}p" "$script")
+[ -n "$answer" ] || answer=$(tail -n 1 "$script")
+case $answer in
+  x) echo "curl: (7) Failed to connect" >&2; exit 7 ;;
+  !*) printf '%s' "${answer#!}" > "$out"; echo "curl: (22) The requested URL returned error: 404" >&2; exit 22 ;;
+esac
+printf '%s' "$answer" > "$out"

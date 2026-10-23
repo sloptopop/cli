@@ -36,7 +36,8 @@ with `-`.
 | 1 | For `check`: the repository did not pass. For `transform`: a step is waiting for a confirmation, was refused, or is blocked by one that was. For `collect`: it could not write the reports directory, the rule pack, `.collect.json` or its output. For `serve`: the session ended without `shutdown`, or a framing error. |
 | 2 | Usage error: an unknown command or option, a missing value, an unknown format or tool, a root or rules directory that does not exist. The message and the usage text go to stderr. |
 | 3 | `collect`: no container runtime answered (nothing ran). `check`, `fix`, `transform` and `local`: `sloptopop-local` is missing, could not be started, failed, or printed something that is not JSON. This includes it refusing: not the top of a git repository, uncommitted or untracked changes, no usable gitleaks report (run `collect`), `HEAD` moved since the request, a branch that exists, a confirmation that is not allowed. |
-| 4 | `check`, `fix`, `transform`: the upload was not confirmed, `curl` is not on `PATH`, or no server answered or it refused the request (the message names the hosted service and the self-hosted option). |
+| 4 | `check`, `fix`, `transform`: the upload was not confirmed, `curl` is not on `PATH`, no server answered or it refused the request (the message names the hosted service and the self-hosted option; `queue-full` and `429` are in [troubleshooting.md](troubleshooting.md#server-and-queue-problems-exit-code-4)), or the server's job failed. |
+| 130 | `check`, `fix`, `transform`: stopped with Ctrl-C (`SIGINT`) while waiting; the job was deleted on the server. |
 
 ## `check`
 
@@ -53,7 +54,9 @@ server's [Report](report-format.md).
    without a usable one: run `sloptopop collect`), and writes the request
    with the analyzer reports `collect` wrote.
 2. It shows what it will upload and asks (`--yes` skips the question), and
-   posts it to `<backend>/v1/transform` with `curl`.
+   submits it to `<backend>/v1/jobs` with `curl`. The server queues it;
+   while it waits, stderr shows how many projects are ahead (see
+   [Waiting in the queue](#waiting-in-the-queue)).
 3. The server checks that no secret arrived in the clear, re-runs the
    analyzers it can from the same pinned images, runs its Detector and
    answers the Report v2. `sloptopop-local report` prints it.
@@ -187,10 +190,12 @@ What it does, in order:
    and why, secret values masked) and asks `Upload? [y/N]`. `--yes`
    uploads without asking (for CI). Without a yes, nothing is sent (exit
    code 4).
-3. **Upload.** It posts the request to `<backend>/v1/transform` with
-   `curl`, the only network call sloptopop makes. The server checks that no
-   secret arrived in the clear, detects, describes the code, plans, and
-   verifies every automated step on the snapshot.
+3. **Upload.** It submits the request to `<backend>/v1/jobs` with
+   `curl` (sloptopop's only network calls are these to the server), waits
+   in the server's queue (see [Waiting in the queue](#waiting-in-the-queue)),
+   and fetches the answer. The server checks that no secret arrived in the
+   clear, detects, describes the code, plans, and verifies every automated
+   step on the snapshot.
 4. **Deliver.** `sloptopop-local apply` checks that the answer belongs to
    the request and to `HEAD`, checks every change against the server's
    whole-file digests (a step is used only if its bytes are exactly the
@@ -220,6 +225,43 @@ and it is not committed until a person confirms it. A first run (dry run
 or `--apply`) stops at the first such step and lists what to confirm:
 
 ```
+## Waiting in the queue
+
+`check`, `fix` and `transform` share one exchange with the server
+(`sloptopop-engine`, hosted or self-hosted), made with `curl`:
+
+1. `POST <backend>/v1/jobs` with the request. The server checks it and
+   its secret masking at once (a refusal is the answer, exit code 4) and
+   queues it: the server runs a few projects at a time, first come, first
+   served.
+2. `GET <backend>/v1/jobs/<id>`, every 2 seconds at first, backing off to
+   every 5. While the job waits, one line on stderr says where it is:
+
+   ```text
+   waiting: 3 projects ahead of you
+   waiting: the server is busy, you are next
+   running…
+   ```
+
+   "Projects ahead" counts the ones waiting before yours and the ones
+   running; "you are next" means only running ones are ahead. On a
+   terminal the line is rewritten in place; otherwise (CI, a pipe) a new
+   line is printed only when it changes. Progress goes to stderr only:
+   with `--format json`, stdout holds only the JSON.
+3. When the job is done, the answer is written to
+   `.sloptopop/transform/<run>/response.json` (the last state the server
+   sent is in `job.json` next to it), and
+   `DELETE <backend>/v1/jobs/<id>` drops it from the server. A failed job
+   prints the server's error code and message and exits 4.
+
+Ctrl-C while waiting deletes the job on the server (a small watcher
+process sends the `DELETE` once `sloptopop` stops) and exits 130. A job
+nobody polls for 2 minutes expires on the server, and an answer not
+fetched within 10 minutes is dropped: the server keeps nothing. A full
+queue (`503 queue-full`) or too many jobs from your address (`429`) are
+refused at step 1: see
+[troubleshooting.md](troubleshooting.md#server-and-queue-problems-exit-code-4).
+
 ## Waiting for confirmation
 - `att-1` (step 2, approver): a failed write to orders now aborts the operation instead of continuing
 Then run:

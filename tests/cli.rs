@@ -656,3 +656,69 @@ fn collect_host_tools_runs_unpinned_tools_with_a_warning() {
         String::from_utf8_lossy(&out.stdout)
     );
 }
+
+#[test]
+fn ctrl_c_while_queued_deletes_the_job() {
+    use std::io::{BufRead, BufReader};
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+
+    let root = scratch("ctrl-c").join("pass");
+    let run = root.join(".sloptopop/transform/0123456789abcdef");
+    fs::create_dir_all(&run).expect("run directory");
+    fs::write(
+        run.join("fake-curl.script"),
+        "{\"state\":\"queued\",\"position\":3,\"running\":1}\n",
+    )
+    .expect("script");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_sloptopop"))
+        .args([
+            "check",
+            root.to_str().expect("UTF-8"),
+            "--backend",
+            "http://ok.test",
+            "--yes",
+        ])
+        .env("PATH", support::CURL_PATH)
+        .env("SLOPTOPOP_LOCAL", FAKE_LOCAL)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("binary should run");
+    let mut stderr = BufReader::new(child.stderr.take().expect("stderr"));
+    let mut line = String::new();
+    while !line.starts_with("waiting:") {
+        line.clear();
+        assert!(
+            stderr.read_line(&mut line).expect("stderr") > 0,
+            "no queue line"
+        );
+    }
+    assert_eq!(
+        line, "waiting: 3 projects ahead of you\n",
+        "the place in line"
+    );
+    let interrupted = Command::new("sh")
+        .args(["-c", &format!("kill -INT {}", child.id())])
+        .status()
+        .expect("kill");
+    assert!(interrupted.success(), "kill -INT");
+    let status = child.wait().expect("exit");
+    assert_eq!(
+        status.signal(),
+        Some(2),
+        "stopped by SIGINT: the shell's 130"
+    );
+    let log = run.join("fake-curl.log");
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let text = fs::read_to_string(&log).unwrap_or_default();
+        if text.ends_with("DELETE http://ok.test/v1/jobs/j1\n") {
+            break;
+        }
+        assert!(Instant::now() < deadline, "never deleted: {text}");
+        std::thread::park_timeout(Duration::from_millis(20));
+    }
+}

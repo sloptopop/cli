@@ -9,6 +9,8 @@ Find the message you see, then follow the steps.
 | 1 | `check`: the repository did not pass. Not an error: see the findings. | [rules.md](rules.md) |
 | 2 | Usage error. | [Usage errors](#usage-errors-exit-code-2) |
 | 3 | `sloptopop-local` is missing, could not start, failed, or printed invalid output. | [sloptopop-local problems](#sloptopop-local-problems-exit-code-3) |
+| 4 | Nothing was uploaded, the server did not take the request, or its job failed. | [Server and queue problems](#server-and-queue-problems-exit-code-4) |
+| 130 | You pressed Ctrl-C (`SIGINT`); the job was deleted on the server. | [Server and queue problems](#server-and-queue-problems-exit-code-4) |
 
 ## sloptopop-local problems (exit code 3)
 
@@ -68,6 +70,63 @@ The message is followed by the usage text. Common ones:
 | `--only needs a value`, `--rules needs a value` | Give the value after the option, as a separate argument. |
 | `--only has an empty tool name` | Remove the extra comma in the list. |
 | `unknown tool: … (docs/collect.md lists them)` | Use a name from the catalogue in [collect.md](collect.md#the-catalogue). |
+
+## Server and queue problems (exit code 4)
+
+The server runs a few projects at a time; the others wait in one queue,
+first come, first served. While yours waits, `sloptopop` shows its place
+on stderr:
+
+```text
+waiting: 3 projects ahead of you
+waiting: the server is busy, you are next
+running…
+```
+
+On a terminal this is one line, rewritten in place; in CI a new line
+appears only when the number changes. It goes to stderr only, so
+`--format json` output stays clean. Ctrl-C deletes the job on the server
+and exits 130. Every message below ends with exit code 4.
+
+### `queue-full` (HTTP 503)
+
+```text
+error: the backend at https://api.sloptopop.dev/v1/jobs did not answer: … 503 ({"error":{"code":"queue-full",…}})
+```
+
+The queue holds as many projects as the server takes. Nothing was
+queued. Run the command again after a while (the server suggests 30
+seconds in `Retry-After`), or use your own self-hosted `sloptopop-engine`
+with `--backend <url>`.
+
+### `per-ip` (HTTP 429)
+
+```text
+error: the backend at https://api.sloptopop.dev/v1/jobs did not answer: … 429 ({"error":{"code":"per-ip",…}})
+```
+
+Your address already has as many projects queued or running as one
+client may (2 on the hosted service). Wait for one to finish, or stop a
+run you do not need any more (Ctrl-C deletes its job). Several machines
+behind one NAT count as one address.
+
+### A `429` with no JSON body
+
+The edge in front of the server (rate limit per client) refused the
+request before it reached the queue. Wait a minute and run the command
+again.
+
+### `error: the server refused the request: <code>: …`
+
+The job ran and failed. The code says why: `secret.unmasked` (a secret
+reached the server unmasked: see [safety.md](safety.md)), `timeout` (the
+transform ran over the server's time limit), `internal` (report it).
+
+### `… did not answer: … 404 ({"error":{"code":"not-found","message":"no such job"}})`
+
+The server no longer knows the job: it restarted (queued jobs do not
+survive a restart), or the job expired because nothing polled it for 2
+minutes (for example the machine slept). Run the command again.
 
 ## `check` reports something unexpected
 

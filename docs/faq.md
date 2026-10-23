@@ -45,8 +45,9 @@ backend. See
 ## Does it collect telemetry?
 
 The current `sloptopop` and `sloptopop-local` send no usage data, no
-install id and no update check; the only network call is the one request
-`check`, `fix` and `transform` send to the sloptopop server. The policy for future
+install id and no update check; the only network calls are the ones
+`check`, `fix` and `transform` make to the sloptopop server: submit the
+request, poll its place in the queue, fetch and delete the answer. The policy for future
 versions is to be confirmed.
 
 ## Is my code uploaded?

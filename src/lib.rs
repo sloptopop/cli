@@ -7,9 +7,10 @@
 //! sloptopop detects only on its server, `sloptopop-engine` (hosted, or
 //! self-hosted from the same image; decision D-0183). `sloptopop check`,
 //! `fix` and `transform` start the open-source `sloptopop-local` binary to
-//! prepare the masked snapshot, post it to the server with `curl` after
-//! showing what is sent and asking (the only network call sloptopop
-//! makes), and start `sloptopop-local` again to print the server's Report
+//! prepare the masked snapshot, submit it to the server's job queue with
+//! `curl` after showing what is sent and asking, and wait for the answer
+//! (the only network calls sloptopop makes), and start `sloptopop-local`
+//! again to print the server's Report
 //! or apply its verified changes on a new branch (see `docs/commands.md`).
 //! `sloptopop local …` runs `sloptopop-local` directly. This crate never
 //! links either.
@@ -27,7 +28,7 @@
 //!
 //! 0. `args`, `collect_convert`, `collect_detect`, `collect_gitignore`,
 //!    `collect_lookup`, `collect_pack`, `diagnostic`, `engine_locate`,
-//!    `framing`, `handshake`, `json_fields`, `jsonrpc`, `backend_post`
+//!    `framing`, `handshake`, `json_fields`, `jsonrpc`, `backend_jobs`
 //!    (no crate imports)
 //! 1. `collect_catalogue`, `collect_runtime`, `engine_run`,
 //!    `render_manifest`, `render_report`, `schema`, `session`
@@ -47,7 +48,7 @@
 //! inherits its module's.
 
 mod args;
-mod backend_post;
+mod backend_jobs;
 mod check_command;
 pub mod cli;
 mod collect_catalogue;

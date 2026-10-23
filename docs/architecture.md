@@ -13,8 +13,9 @@ your code ─► language library ─JSON-RPC─► sloptopop (open-source CLI) 
   2.0 to it. They contain no analysis logic.
 - **`sloptopop`** (open source, MIT OR Apache-2.0) is the command-line tool
   and the JSON-RPC server. It runs the open-source analyzers (`collect`),
-  starts `sloptopop-local` as a separate process, and makes the one HTTPS
-  call to the server. It never links either.
+  starts `sloptopop-local` as a separate process, and makes the HTTPS calls
+  to the server (submit the job, poll its place in the queue, fetch and
+  delete the answer). It never links either.
 - **`sloptopop-local`** (open source, MIT OR Apache-2.0) prepares the
   snapshot the server analyses (the files of `HEAD`, every secret value
   gitleaks reports masked, the analyzer reports), applies the changes the
@@ -39,8 +40,9 @@ sloptopop transform [root] [--apply] [--branch <name>] [--backend <url>] [--yes]
 
 All three go the same way: `sloptopop-local request <root> --mode <mode>`
 writes the request (refusing without a clean tree or a usable gitleaks
-report), the CLI shows the upload manifest, asks, and posts the request to
-the server with `curl` (the only network call, made by this open code);
+report), the CLI shows the upload manifest, asks, and submits the request
+to the server's job queue with `curl`, polls it while it waits and fetches
+the answer (the only network calls, made by this open code);
 then `sloptopop-local report` prints the server's
 [Report](report-format.md) (`check`), or `sloptopop-local apply` delivers
 its verified steps (`fix`: the files the mechanical fixes create;

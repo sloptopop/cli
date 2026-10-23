@@ -197,7 +197,7 @@ fn check_renders_text_by_default() {
     );
     assert!(
         out.stderr
-            .contains("sloptopop check will upload to http://ok.test/v1/transform:"),
+            .contains("sloptopop check will upload to http://ok.test/v1/jobs:"),
         "the manifest first: {}",
         out.stderr
     );
@@ -367,4 +367,61 @@ fn collect_is_dispatched_with_the_locator_settings() {
         unknown.stderr
     );
     assert!(unknown.stderr.ends_with(USAGE), "usage");
+}
+
+/// Scripts the fake server's answers to the polls of `root`'s run.
+fn script(root: &str, answers: &str) -> std::path::PathBuf {
+    let run = std::path::Path::new(root).join(".sloptopop/transform/0123456789abcdef");
+    std::fs::create_dir_all(&run).unwrap();
+    std::fs::write(run.join("fake-curl.script"), answers).unwrap();
+    run
+}
+
+#[test]
+fn check_waits_in_the_queue_with_progress_on_stderr_only() {
+    let dir = TempDir::new();
+    let root = repo(&dir, "pass");
+    let run = script(
+        &root,
+        "{\"state\":\"queued\",\"position\":2,\"running\":1}\n{\"state\":\"queued\",\"position\":1,\"running\":1}\n{\"state\":\"running\"}\n{\"state\":\"done\",\"response\":{\"answered\":true}}\n",
+    );
+    let out = served("check", &root, &["--format", "json"]);
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    let report: Value = serde_json::from_str(&out.stdout).unwrap();
+    assert_eq!(report["passed"], true, "stdout holds only the Report");
+    assert!(
+        out.stderr.contains(
+            "waiting: 2 projects ahead of you\nwaiting: the server is busy, you are next\nrunning…\n"
+        ),
+        "{}",
+        out.stderr
+    );
+    assert!(!out.stdout.contains("waiting"), "no progress on stdout");
+    let log = std::fs::read_to_string(run.join("fake-curl.log")).unwrap();
+    assert_eq!(
+        log,
+        "POST http://ok.test/v1/jobs\nGET http://ok.test/v1/jobs/j1\nGET http://ok.test/v1/jobs/j1\nGET http://ok.test/v1/jobs/j1\nGET http://ok.test/v1/jobs/j1\nDELETE http://ok.test/v1/jobs/j1\n",
+        "submitted, polled, deleted"
+    );
+}
+
+#[test]
+fn a_failed_job_exits_4_and_is_deleted() {
+    let dir = TempDir::new();
+    let root = repo(&dir, "pass");
+    let run = script(
+        &root,
+        "{\"state\":\"failed\",\"error\":{\"code\":\"secret.unmasked\",\"message\":\"`a` line 1\"}}\n",
+    );
+    let out = served("transform", &root, &[]);
+    assert_eq!(out.code, 4, "{}", out.stderr);
+    assert!(
+        out.stderr
+            .contains("error: the server refused the request: secret.unmasked: `a` line 1\n"),
+        "{}",
+        out.stderr
+    );
+    assert!(!out.stderr.contains("hint:"), "the server answered");
+    let log = std::fs::read_to_string(run.join("fake-curl.log")).unwrap();
+    assert!(log.ends_with("DELETE http://ok.test/v1/jobs/j1\n"), "{log}");
 }

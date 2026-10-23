@@ -21,7 +21,7 @@ test = false
 blake3 = "=1.8.7"
 schemars = "1.2.2"
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.154"
+serde_json = { version = "1.0.154", features = ["raw_value"] }
 
 # Lint policy shared by every sloptopop Rust repo.
 # Keep this block identical across repos; change it everywhere at once.

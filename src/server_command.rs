@@ -7,9 +7,12 @@
 //!    writes the request and its manifest;
 //! 2. this module shows the manifest and asks before anything is sent
 //!    (`--yes` skips the question, for CI);
-//! 3. it posts the request to the server with `curl` (the only network
-//!    call sloptopop makes, and the only code that makes one is this open
-//!    code) and the answer is written next to the request.
+//! 3. it submits the request to the server's job queue with `curl` (the
+//!    only network calls sloptopop makes, and the only code that makes them
+//!    is this open code), shows its place in line on stderr until the job
+//!    runs, and writes the answer next to the request; the job is then
+//!    deleted on the server, also when `sloptopop` is stopped (Ctrl-C,
+//!    exit 130) while it waits.
 //!
 //! Without a server there is no check: when none answers, the error says
 //! so and names the hosted service and the self-hosted option.
@@ -22,7 +25,7 @@ use std::path::Path;
 
 use serde_json::Value;
 
-use crate::backend_post::{endpoint, post};
+use crate::backend_jobs::{Cancel, Progress, endpoint, submit, wait};
 use crate::collect_lookup::find;
 use crate::command_io::parse_document;
 use crate::diagnostic::report;
@@ -59,7 +62,7 @@ pub(crate) struct Answered {
     pub(crate) response: std::path::PathBuf,
 }
 
-/// The hint every failed exchange ends with.
+/// The hint every exchange the server did not take ends with.
 fn hint() -> String {
     format!(
         "hint: sloptopop detects only on its server: use the hosted service ({DEFAULT_BACKEND}, the default) or your self-hosted sloptopop-engine with --backend <url>\n"
@@ -77,7 +80,8 @@ fn confirmed(stdin: &mut dyn BufRead, stderr: &mut dyn Write) -> bool {
 }
 
 /// Prepares the request `asked` describes, shows its manifest, asks, and
-/// posts it; the run the server answered, or the exit code to stop with.
+/// submits it and waits for the answer; the run the server answered, or
+/// the exit code to stop with.
 pub(crate) fn exchange(
     locator: &Locator,
     asked: Asked<'_>,
@@ -90,7 +94,8 @@ pub(crate) fn exchange(
         stderr,
     )?;
     let document = parse_document(&prepared.stdout, stderr)?;
-    let url = endpoint(asked.backend.unwrap_or(DEFAULT_BACKEND));
+    let backend = asked.backend.unwrap_or(DEFAULT_BACKEND);
+    let url = endpoint(backend);
     let root = Path::new(asked.root);
     let request = root.join(text(&document, "request"));
     let response = root.join(text(&document, "response"));
@@ -110,12 +115,28 @@ pub(crate) fn exchange(
             UPLOAD_ERROR,
         ));
     };
-    if let Err(why) = post(&curl, &url, &request, &response) {
-        return Err(report(
-            stderr,
-            &format!("error: {why}\n{}", hint()),
-            UPLOAD_ERROR,
-        ));
+    let answer = response.with_file_name("job.json");
+    let status = match submit(&curl, backend, &request, &answer) {
+        Ok(status) => status,
+        Err(why) => {
+            return Err(report(
+                stderr,
+                &format!("error: {why}\n{}", hint()),
+                UPLOAD_ERROR,
+            ));
+        }
+    };
+    let cancel = Cancel::start(&curl, &status, &answer);
+    let waited = wait(
+        &curl,
+        &status,
+        (&answer, &response),
+        locator.poll,
+        &mut Progress::new(stderr, locator.terminal),
+    );
+    cancel.now();
+    if let Err(why) = waited {
+        return Err(report(stderr, &format!("error: {why}\n"), UPLOAD_ERROR));
     }
     Ok(Answered {
         run: text(&document, "run").to_owned(),

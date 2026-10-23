@@ -8,7 +8,9 @@
 
 use std::env;
 use std::ffi::OsString;
+use std::io::{self, IsTerminal};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 /// File name of the `sloptopop local` binary (without the platform's
 /// suffix).
@@ -37,8 +39,13 @@ pub(crate) const COLLECT_VARS: [&str; 14] = [
     "GOINSECURE",
 ];
 
+/// How often a queued job is polled at first (it backs off to two and a
+/// half times this).
+pub(crate) const POLL_EVERY: Duration = Duration::from_secs(2);
+
 /// Where to look for the engine (and what `collect` needs from the
-/// environment), captured once so lookups are testable.
+/// environment, and how the server's queue is shown), captured once so
+/// lookups are testable.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Locator {
     /// The value of `SLOPTOPOP_LOCAL`, if set and not empty.
@@ -50,6 +57,11 @@ pub struct Locator {
     /// The set, non-empty environment variables `collect` reads: its own
     /// settings, the cache location and the Go module settings.
     pub vars: Vec<(String, OsString)>,
+    /// Whether stderr is a terminal (the queue line is then rewritten in
+    /// place).
+    pub terminal: bool,
+    /// How often a queued job is polled at first (2 s).
+    pub poll: Duration,
 }
 
 impl Locator {
@@ -70,6 +82,8 @@ impl Locator {
                         .map(|value| ((*name).to_owned(), value))
                 })
                 .collect(),
+            terminal: io::stderr().is_terminal(),
+            poll: POLL_EVERY,
         }
     }
 
