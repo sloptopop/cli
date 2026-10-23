@@ -7,7 +7,7 @@
 //! The flags are fixed so that output is complete (no caps on the number
 //! of issues), offline (the vulnerability data is a mounted snapshot), and
 //! stable from run to run. Copyleft tools (Opengrep, Semgrep,
-//! golangci-lint, Pylint, the LGPL Sonar analyzers) are only ever started
+//! golangci-lint, Pylint, the LGPL Sonar analyzers, Cppcheck) are only ever started
 //! as separate processes; nothing here links a tool. Every licence was read
 //! from the tool's licence file, whose address each entry records, never
 //! only from registry metadata.
@@ -17,16 +17,24 @@
 //! below are the digests the component library serves (D-0184). The
 //! catalogue is the signed index: it ships inside the signed release.
 //!
+//! The C and C++ analyzers report only the defect rules listed in
+//! [`defects`], each with its defect class; the other languages' analyzers
+//! tag the defect rules listed in [`lint_defects`] and drop the findings of
+//! those that are off.
+//!
 //! Standards: SCF VPM-12 (Vulnerability Scanning), CFG-13 (Open
 //! Source Software: every analyzer with its licence), CFG-11 (Software
 //! Usage Restrictions: fixed, offline flags), TDA-06.5 (Software Release
 //! Integrity Verification: every image pinned by its SHA-256 digest).
 
+mod defects;
+mod lint_defects;
+
 use std::collections::BTreeSet;
 
 use Arg::{Fixed, Output, ReportsDir, Rules};
 
-use crate::collect_convert::{Columns, Converter};
+use crate::collect_convert::{Columns, Converter, Rule};
 use crate::collect_detect::Ecosystem;
 
 /// The directory, relative to the repository root, that reports go to.
@@ -188,6 +196,11 @@ pub(crate) struct Tool {
     pub(crate) convert: Option<(Converter, &'static str)>,
     /// Extra environment variables in the container.
     pub(crate) env: &'static [(&'static str, &'static str)],
+    /// The environment variable that gets the repository's path on the
+    /// host, if any: the clang-tidy and Cppcheck wrappers map the paths in
+    /// the project's compile database (written for the host checkout) to
+    /// the mounted one.
+    pub(crate) root_variable: Option<&'static str>,
     /// The step that must run first, with network.
     pub(crate) prepare: Option<Prepare>,
     /// The vulnerability data it needs.
@@ -198,6 +211,15 @@ pub(crate) struct Tool {
     /// Known refusals: when the tool fails and its first error line holds
     /// the first text, the second is recorded as the reason.
     pub(crate) refusals: &'static [(&'static str, &'static str)],
+    /// The tool's defect rules ([`defects`]), each with its defect class:
+    /// the report tags each listed rule with its class and drops the
+    /// results of the listed rules that are off. Rules not listed are kept
+    /// as the tool reports them.
+    pub(crate) defects: &'static [Rule],
+    /// The tool writes its SARIF results in no fixed order (the C#
+    /// compiler, whose analyzers run concurrently), so the report sorts
+    /// them.
+    pub(crate) unordered: bool,
 }
 
 impl Tool {
@@ -270,10 +292,13 @@ const PLAIN: Tool = Tool {
     findings: &[],
     convert: None,
     env: &[],
+    root_variable: None,
     prepare: None,
     data: None,
     sarif_fixes: None,
     refusals: &[],
+    defects: &[],
+    unordered: false,
 };
 
 const GITLEAKS: Image = Image {
@@ -289,6 +314,25 @@ const ESLINT_SONARJS: Image = Image {
     digest: "sha256:71327a7bcad1d2d6ba138f461f48c438852fa1b17511bddb166d23b83998ee13",
     bytes: [107_709_256, 108_049_408],
 };
+
+const GOLANGCI_LINT: Image = Image {
+    name: "analyzers/golangci-lint",
+    version: "2.14.0-2",
+    digest: "sha256:9855d6d99b4a07a18c37f07c09165bb3e602d515c1df666592088cf9e9ae740e",
+    bytes: [90_877_383, 86_374_424],
+};
+
+const SWIFTLINT: Image = Image {
+    name: "analyzers/swiftlint",
+    version: "0.65.1-2",
+    digest: "sha256:398cb703a29bfca494cb009040e1a7dd2a4227fb62aaf4f34e11ef1d7af42d4c",
+    bytes: [276_061_429, 273_565_369],
+};
+
+const GOLANGCI_LINT_LICENCE: &[&str] =
+    &["https://github.com/golangci/golangci-lint/blob/v2.14.0/LICENSE"];
+
+const SWIFTLINT_LICENCE: &[&str] = &["https://github.com/realm/SwiftLint/blob/0.65.1/LICENSE"];
 
 const GITLEAKS_LICENCE: &[&str] = &["https://github.com/gitleaks/gitleaks/blob/v8.30.1/LICENSE"];
 
@@ -508,9 +552,10 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         data: Some(Data::GoVuln),
         ..PLAIN
     },
-    // S110 (try-except-pass), S501 (TLS verification off) and N999
-    // (invalid module name) are not in Ruff's default selection; the
-    // crown-jewel verdicts retire native rules to them.
+    // S501 (TLS verification off) and N999 (invalid module name) are not
+    // in Ruff's default selection; the crown-jewel verdicts retire native
+    // rules to them. The defect rules of [`lint_defects::RUFF_RULES`] (S110,
+    // try-except-pass, among them) are selected too.
     Tool {
         name: "ruff",
         command: "ruff",
@@ -531,12 +576,13 @@ pub(crate) const CATALOGUE: &[Tool] = &[
             Output(""),
             Fixed("--no-cache"),
             Fixed("--extend-select"),
-            Fixed("S110,S501,N999"),
+            Fixed(lint_defects::RUFF_SELECT),
             Fixed("."),
         ],
         output: "ruff.sarif",
         findings: &[1],
         convert: Some((Converter::RuffJson, "ruff.json")),
+        defects: lint_defects::RUFF_RULES,
         ..PLAIN
     },
     Tool {
@@ -607,6 +653,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         sink: Sink::Stdout,
         findings: &[1],
         convert: Some((Converter::BiomeRdjson, "biome.rdjson")),
+        defects: lint_defects::BIOME_RULES,
         ..PLAIN
     },
     // eslint-plugin-sonarjs 2.0.4 (LGPL-3.0-only, the last release before
@@ -614,7 +661,9 @@ pub(crate) const CATALOGUE: &[Tool] = &[
     // run by the image's pinned ESLint 9.14.0 with sloptopop's own
     // configuration (never the project's). `json-with-metadata` is the only
     // ESLint format that keeps each finding's fix and suggestions; collect
-    // converts it to SARIF.
+    // converts it to SARIF. The defect rules of
+    // [`lint_defects::SONARJS_RULES`] are tagged with their class; the
+    // type-aware `null-dereference` turns itself off without types.
     Tool {
         name: "eslint-sonarjs",
         command: "eslint",
@@ -637,10 +686,15 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         output: "eslint-sonarjs.sarif",
         findings: &[1],
         convert: Some((Converter::EslintJson, "eslint-sonarjs.json")),
+        defects: lint_defects::SONARJS_RULES,
         ..PLAIN
     },
-    // ESLint core and typescript-eslint, with exactly the rules the
-    // crown-jewel verdicts retire native rules to (decision O10).
+    // ESLint core and typescript-eslint, with the rules the crown-jewel
+    // verdicts retire native rules to (decision O10) and the core defect
+    // rules that need no type information. The type-aware ones
+    // (no-unnecessary-condition, strict-boolean-expressions) stay out: the
+    // image never installs the project's dependencies, so it has no
+    // types to give them.
     Tool {
         name: "eslint-typescript",
         command: "eslint",
@@ -652,9 +706,9 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         scope: Scope::Only(Ecosystem::Node),
         kind: Kind::Run(Image {
             name: "analyzers/eslint-typescript",
-            version: "8.71.2-1",
-            digest: "sha256:996e45f60992b17a1f0ec3dd85d8302d8b1ba86e1d80028985b1f46f18308c79",
-            bytes: [95_199_267, 95_539_419],
+            version: "8.71.2-2",
+            digest: "sha256:5eabb4a5ccb5d7dbe271478c79a746d3765d2b902e8dfc1aa6cd78d9862eadb6",
+            bytes: [95_199_630, 95_539_782],
         }),
         args: &[
             Fixed("--config"),
@@ -671,6 +725,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         output: "eslint-typescript.sarif",
         findings: &[1],
         convert: Some((Converter::EslintJson, "eslint-typescript.json")),
+        defects: lint_defects::ESLINT_TYPESCRIPT_RULES,
         ..PLAIN
     },
     Tool {
@@ -725,14 +780,9 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         name: "golangci-lint",
         command: "golangci-lint",
         licence: "GPL-3.0-only",
-        licence_files: &["https://github.com/golangci/golangci-lint/blob/v2.14.0/LICENSE"],
+        licence_files: GOLANGCI_LINT_LICENCE,
         scope: Scope::Only(Ecosystem::Go),
-        kind: Kind::Run(Image {
-            name: "analyzers/golangci-lint",
-            version: "2.14.0-1",
-            digest: "sha256:9c1dce300769edcdc0feaa01508ad834e7a9d685b670f4d0bb1a259c38909350",
-            bytes: [90_876_823, 86_373_864],
-        }),
+        kind: Kind::Run(GOLANGCI_LINT),
         args: &[
             Fixed("run"),
             Fixed("--max-issues-per-linter=0"),
@@ -755,18 +805,40 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         )],
         ..PLAIN
     },
+    // The defect linters of [`lint_defects::GOLANGCI_DEFECT_RULES`] with the
+    // image's own configuration, which replaces the project's: a separate
+    // run, so the project's linters and settings above stay as they are,
+    // and a version-1 project file does not stop it.
+    Tool {
+        name: "golangci-lint-defects",
+        command: "golangci-lint",
+        licence: "GPL-3.0-only",
+        licence_files: GOLANGCI_LINT_LICENCE,
+        scope: Scope::Only(Ecosystem::Go),
+        kind: Kind::Run(GOLANGCI_LINT),
+        args: &[
+            Fixed("run"),
+            Fixed("--config=/opt/golangci-lint/defects.yml"),
+            Fixed("--max-issues-per-linter=0"),
+            Fixed("--max-same-issues=0"),
+            Fixed("--uniq-by-line=false"),
+            Output("--output.sarif.path="),
+            Fixed("./..."),
+        ],
+        host: Host::ImageOnly,
+        output: "golangci-defects.sarif",
+        findings: &[1],
+        prepare: Some(Prepare::GoModules),
+        defects: lint_defects::GOLANGCI_DEFECT_RULES,
+        ..PLAIN
+    },
     Tool {
         name: "swiftlint",
         command: "swiftlint",
         licence: "MIT",
-        licence_files: &["https://github.com/realm/SwiftLint/blob/0.65.1/LICENSE"],
+        licence_files: SWIFTLINT_LICENCE,
         scope: Scope::Only(Ecosystem::Swift),
-        kind: Kind::Run(Image {
-            name: "analyzers/swiftlint",
-            version: "0.65.1-2",
-            digest: "sha256:398cb703a29bfca494cb009040e1a7dd2a4227fb62aaf4f34e11ef1d7af42d4c",
-            bytes: [276_061_429, 273_565_369],
-        }),
+        kind: Kind::Run(SWIFTLINT),
         args: &[
             Fixed("lint"),
             Fixed("--quiet"),
@@ -779,11 +851,58 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         findings: &[2],
         ..PLAIN
     },
+    // The defect rules of [`lint_defects::SWIFTLINT_DEFECT_RULES`], most of
+    // them opt-in, in a run of their own: `--only-rule` runs exactly these,
+    // whatever the project's configuration enables or disables.
+    Tool {
+        name: "swiftlint-defects",
+        command: "swiftlint",
+        licence: "MIT",
+        licence_files: SWIFTLINT_LICENCE,
+        scope: Scope::Only(Ecosystem::Swift),
+        kind: Kind::Run(SWIFTLINT),
+        args: &[
+            Fixed("lint"),
+            Fixed("--quiet"),
+            Fixed("--no-cache"),
+            Fixed("--reporter"),
+            Fixed("sarif"),
+            Fixed("--only-rule"),
+            Fixed("discarded_notification_center_observer"),
+            Fixed("--only-rule"),
+            Fixed("duplicate_conditions"),
+            Fixed("--only-rule"),
+            Fixed("force_cast"),
+            Fixed("--only-rule"),
+            Fixed("force_try"),
+            Fixed("--only-rule"),
+            Fixed("force_unwrapping"),
+            Fixed("--only-rule"),
+            Fixed("identical_operands"),
+            Fixed("--only-rule"),
+            Fixed("implicitly_unwrapped_optional"),
+            Fixed("--only-rule"),
+            Fixed("unhandled_throwing_task"),
+            Fixed("--only-rule"),
+            Fixed("unowned_variable_capture"),
+            Fixed("--only-rule"),
+            Fixed("unused_setter_value"),
+            Fixed("--only-rule"),
+            Fixed("weak_delegate"),
+        ],
+        output: "swiftlint-defects.sarif",
+        sink: Sink::Stdout,
+        findings: &[2],
+        defects: lint_defects::SWIFTLINT_DEFECT_RULES,
+        ..PLAIN
+    },
     // SonarAnalyzer.CSharp 9.32.0.97167 (LGPL-3.0-only, the last release
     // before the licence change) as Roslyn analyzers in the project's own
     // build, added by the image's Directory.Build.props, so no project file
     // changes. Each project's compiler writes its SARIF v2.1 log to the
-    // reports directory.
+    // reports directory. The build is serial (`-maxcpucount:1`): in a
+    // parallel build a project can be compiled twice at once, and the two
+    // compilers then write one log file over each other.
     Tool {
         name: "sonaranalyzer-csharp",
         command: "dotnet",
@@ -795,14 +914,15 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         scope: Scope::Only(Ecosystem::Dotnet),
         kind: Kind::Run(Image {
             name: "analyzers/sonaranalyzer-csharp",
-            version: "9.32.0.97167-1",
-            digest: "sha256:0bbbb5fc22d11bebc4e799b84463f3b1a28f4f2be7413d2f74203a80aabe6e36",
-            bytes: [352_298_027, 344_174_207],
+            version: "9.32.0.97167-2",
+            digest: "sha256:6773085bccaa3415ed81ca45adbe199d08689c26b07b439a08ec98d68ca78a92",
+            bytes: [352_298_798, 344_174_978],
         }),
         args: &[
             Fixed("build"),
             Fixed("--no-restore"),
             Fixed("--no-incremental"),
+            Fixed("-maxcpucount:1"),
             Fixed("-p:TreatWarningsAsErrors=false"),
             Fixed("-p:DirectoryBuildPropsPath=/opt/sonaranalyzer-csharp/Directory.Build.props"),
         ],
@@ -810,6 +930,8 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         output: "sonaranalyzer-csharp.*.sarif",
         sink: Sink::Config,
         prepare: Some(Prepare::DotnetRestore),
+        defects: lint_defects::SONAR_CSHARP_RULES,
+        unordered: true,
         ..PLAIN
     },
     // OpenSSF Scorecard, only its License check, on the local checkout.
@@ -914,7 +1036,7 @@ pub(crate) const CATALOGUE: &[Tool] = &[
             Fixed("-d"),
             Fixed("."),
             Fixed("-R"),
-            Fixed("category/java/errorprone.xml/EmptyCatchBlock"),
+            Fixed(lint_defects::PMD_RULESETS),
             Fixed("-f"),
             Fixed("sarif"),
             Fixed("-r"),
@@ -922,8 +1044,12 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         ],
         output: "pmd.sarif",
         findings: &[4],
+        defects: lint_defects::PMD_RULES,
         ..PLAIN
     },
+    // detekt with the image's `sloptopop.yml`: its default rules plus the
+    // defect rules of [`lint_defects::DETEKT_RULES`], without type
+    // resolution (the rules that need it report nothing).
     Tool {
         name: "detekt",
         command: "detekt",
@@ -932,9 +1058,9 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         scope: Scope::Only(Ecosystem::Jvm),
         kind: Kind::Run(Image {
             name: "analyzers/detekt",
-            version: "1.23.8-1",
-            digest: "sha256:a5125bc6d9fae36e2508fd6f932c9ce97c393ced28bdda9a060b7f3b787edc89",
-            bytes: [179_773_093, 177_715_729],
+            version: "1.23.8-2",
+            digest: "sha256:3ef2e28818d0ee669b06f771d403f9377d9f4f5d0b1b8b182c973f5b897b81e5",
+            bytes: [179_773_802, 177_716_438],
         }),
         args: &[
             Fixed("--input"),
@@ -947,8 +1073,16 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         host: Host::ImageOnly,
         output: "detekt.sarif",
         findings: &[2],
+        defects: lint_defects::DETEKT_RULES,
         ..PLAIN
     },
+    // clang-tidy 19.1.0 with the Debian trixie C and C++ system headers.
+    // The image's wrapper analyzes the C and C++ files the project's
+    // compile_commands.json lists, compiled as it says (its host paths
+    // mapped to the mounted checkout in a copy), else every C file as C17
+    // and every C++ file as C++17 with `-I. -Iinclude`; always for
+    // x86_64-linux-gnu, whatever the host. Its errors (files that do not
+    // compile) stay in the report as tool execution notifications.
     Tool {
         name: "clang-tidy",
         command: "sloptopop-clang-tidy",
@@ -959,15 +1093,54 @@ pub(crate) const CATALOGUE: &[Tool] = &[
         scope: Scope::Only(Ecosystem::Cpp),
         kind: Kind::Run(Image {
             name: "analyzers/clang-tidy",
-            version: "19.1.0-1",
-            digest: "sha256:6c12730b2a734cbe2430b8dcef41b2bd9c4a636dbdec716ca6f6a478db28b5d3",
-            bytes: [68_524_962, 68_624_873],
+            version: "19.1.0-2",
+            digest: "sha256:833f1f4c382810c0871890e591695cd39fcc86a105e30fa569d9f3b40f76f0ba",
+            bytes: [72_901_945, 73_006_021],
         }),
-        args: &[Fixed("-*,bugprone-empty-catch")],
+        args: &[Fixed(defects::CLANG_TIDY_CHECKS)],
         host: Host::ImageOnly,
         output: "clang-tidy.sarif",
         sink: Sink::Stdout,
-        convert: Some((Converter::ClangTidy, "clang-tidy.txt")),
+        convert: Some((
+            Converter::ClangTidy(defects::CLANG_TIDY_RULES),
+            "clang-tidy.txt",
+        )),
+        root_variable: Some("SLOPTOPOP_HOST_ROOT"),
+        defects: defects::CLANG_TIDY_RULES,
+        ..PLAIN
+    },
+    // Cppcheck 2.17.1 (GPL-3.0-or-later, a separate process) as Debian
+    // builds it. The image's wrapper takes the files and flags from the
+    // project's compile_commands.json if there is one (its host paths mapped
+    // to the mounted checkout in a copy), else checks every C
+    // file as C17 and every C++ file as C++17 with no defines, always for
+    // the unix64 platform, and prints the XML version 2 report. The
+    // libraries tell it which test assertions end a test when they fail
+    // (GoogleTest's own; Unity, Catch2 and assert() in the image's
+    // tests.cfg), so a pointer asserted non-null is not reported.
+    Tool {
+        name: "cppcheck",
+        command: "sloptopop-cppcheck",
+        licence: "GPL-3.0-or-later",
+        licence_files: &["https://github.com/danmar/cppcheck/blob/2.17.1/COPYING"],
+        scope: Scope::Only(Ecosystem::Cpp),
+        kind: Kind::Run(Image {
+            name: "analyzers/cppcheck",
+            version: "2.17.1-2",
+            digest: "sha256:a02448fc5fec2ed5eebcb9a3069fe1922465f6cb3c148dd3d1775b5dc86e2106",
+            bytes: [33_009_615, 33_161_324],
+        }),
+        args: &[
+            Fixed("--enable=warning,performance,portability"),
+            Fixed("--library=googletest"),
+            Fixed("--library=/usr/share/sloptopop-cppcheck/tests.cfg"),
+        ],
+        host: Host::ImageOnly,
+        output: "cppcheck.sarif",
+        sink: Sink::Stdout,
+        convert: Some((Converter::Cppcheck(defects::CPPCHECK_RULES), "cppcheck.txt")),
+        root_variable: Some("SLOPTOPOP_HOST_ROOT"),
+        defects: defects::CPPCHECK_RULES,
         ..PLAIN
     },
     // Coverage producers: documented only, never run.

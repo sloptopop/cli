@@ -1,0 +1,65 @@
+# sloptopop-clang-tidy: no compile database, files parsed as -std=c17 / -std=c++17 -I. -Iinclude
+1 warning generated.
+/src/null.c:1:44: warning: Dereference of null pointer (loaded from variable 'p') [clang-analyzer-core.NullDereference]
+    1 | int test_c(int *p) { if (p) (*p)++; return *p; }
+      |                                            ^~
+/src/null.c:1:26: note: Assuming 'p' is null
+    1 | int test_c(int *p) { if (p) (*p)++; return *p; }
+      |                          ^
+/src/null.c:1:22: note: Taking false branch
+    1 | int test_c(int *p) { if (p) (*p)++; return *p; }
+      |                      ^
+/src/null.c:1:44: note: Dereference of null pointer (loaded from variable 'p')
+    1 | int test_c(int *p) { if (p) (*p)++; return *p; }
+      |                                            ^~
+1 warning generated.
+/src/null.cpp:1:41: warning: Dereference of null pointer (loaded from variable 'p') [clang-analyzer-core.NullDereference]
+    1 | int test(int* p){ if (p) (*p)++; return *p; }
+      |                                         ^~
+/src/null.cpp:1:23: note: Assuming 'p' is null
+    1 | int test(int* p){ if (p) (*p)++; return *p; }
+      |                       ^
+/src/null.cpp:1:19: note: Taking false branch
+    1 | int test(int* p){ if (p) (*p)++; return *p; }
+      |                   ^
+/src/null.cpp:1:41: note: Dereference of null pointer (loaded from variable 'p')
+    1 | int test(int* p){ if (p) (*p)++; return *p; }
+      |                                         ^~
+1 warning generated.
+/src/stdio.c:2:47: warning: Dereference of null pointer (loaded from variable 'p') [clang-analyzer-core.NullDereference]
+    2 | int test_stdio(int* p){ if (p) (*p)++; return *p; }
+      |                                               ^
+/src/stdio.c:3:53: note: Passing value via 1st parameter 'p'
+    3 | void show_count(int *p) { printf("%d\n", test_stdio(p)); }
+      |                                                     ^
+/src/stdio.c:3:42: note: Calling 'test_stdio'
+    3 | void show_count(int *p) { printf("%d\n", test_stdio(p)); }
+      |                                          ^~~~~~~~~~~~~
+/src/stdio.c:2:29: note: Assuming 'p' is null
+    2 | int test_stdio(int* p){ if (p) (*p)++; return *p; }
+      |                             ^
+/src/stdio.c:2:25: note: Taking false branch
+    2 | int test_stdio(int* p){ if (p) (*p)++; return *p; }
+      |                         ^
+/src/stdio.c:2:47: note: Dereference of null pointer (loaded from variable 'p')
+    2 | int test_stdio(int* p){ if (p) (*p)++; return *p; }
+      |                                               ^~
+1 warning generated.
+/src/string.cpp:2:48: warning: Dereference of null pointer (loaded from variable 'p') [clang-analyzer-core.NullDereference]
+    2 | int test_string(int* p){ if (p) (*p)++; return *p; }
+      |                                                ^
+/src/string.cpp:3:63: note: Passing value via 1st parameter 'p'
+    3 | std::string label(int* p) { return std::to_string(test_string(p)); }
+      |                                                               ^
+/src/string.cpp:3:51: note: Calling 'test_string'
+    3 | std::string label(int* p) { return std::to_string(test_string(p)); }
+      |                                                   ^~~~~~~~~~~~~~
+/src/string.cpp:2:30: note: Assuming 'p' is null
+    2 | int test_string(int* p){ if (p) (*p)++; return *p; }
+      |                              ^
+/src/string.cpp:2:26: note: Taking false branch
+    2 | int test_string(int* p){ if (p) (*p)++; return *p; }
+      |                          ^
+/src/string.cpp:2:48: note: Dereference of null pointer (loaded from variable 'p')
+    2 | int test_string(int* p){ if (p) (*p)++; return *p; }
+      |                                                ^~

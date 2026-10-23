@@ -398,7 +398,17 @@ fn finish(root: &Path, tool: &Tool, version: &str, status: Status) -> Status {
                 .display()
                 .to_string();
             read(path, &name)
-                .and_then(|bytes| normalize(&bytes, tool.name, version, tool.sarif_fixes, root))
+                .and_then(|bytes| {
+                    normalize(
+                        &bytes,
+                        tool.name,
+                        version,
+                        tool.sarif_fixes,
+                        tool.defects,
+                        tool.unordered,
+                        root,
+                    )
+                })
                 .and_then(|sarif| write(path, &name, sarif))
         })
     });

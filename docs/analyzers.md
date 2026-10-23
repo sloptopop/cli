@@ -68,21 +68,22 @@ Opengrep and Semgrep always run with sloptopop's own rules
 | JavaScript, TypeScript | oxlint | MIT |
 | JavaScript, TypeScript | Biome | MIT OR Apache-2.0 |
 | JavaScript, TypeScript | eslint-plugin-sonarjs 2.0.4 | LGPL-3.0-only |
-| JavaScript, TypeScript | ESLint and typescript-eslint (`ban-ts-comment`, `no-empty`, `no-empty-function`) | MIT |
+| JavaScript, TypeScript | ESLint and typescript-eslint (`ban-ts-comment`, `no-empty`, `no-empty-function`, and ESLint's defect rules that need no types; see [collect.md](collect.md#javascript-and-typescript)) | MIT |
 | JavaScript, TypeScript | dependency-cruiser (`no-circular`) | MIT |
-| Python | Ruff (its defaults plus `S110`, `S501`, `N999`) | MIT |
+| Python | Ruff (its defaults plus `S501`, `N999` and its defect rules; see [collect.md](collect.md#python-ruff)) | MIT |
 | Python | Bandit | Apache-2.0 |
 | Python | Pylint (`cyclic-import`) | GPL-2.0-or-later |
 | Go | staticcheck | MIT |
-| Go | golangci-lint | GPL-3.0-only |
+| Go | golangci-lint (your configuration; and a second run with only `govet` nilness and the defect linters; see [collect.md](collect.md#go-golangci-lint)) | GPL-3.0-only |
 | Go | gosec | Apache-2.0 |
 | Go | govulncheck | BSD-3-Clause |
-| Java, Kotlin | PMD (`EmptyCatchBlock`) | BSD-3-Clause |
-| Kotlin | detekt (`EmptyCatchBlock`) | Apache-2.0 |
+| Java | PMD (`EmptyCatchBlock` and its defect rules; see [collect.md](collect.md#java-pmd)) | BSD-3-Clause |
+| Kotlin | detekt (`EmptyCatchBlock` and the `potential-bugs` and `exceptions` defect rules; see [collect.md](collect.md#kotlin-detekt)) | Apache-2.0 |
 | PHP | PHP_CodeSniffer (`Squiz.Classes.ClassFileName`, `Generic.CodeAnalysis.EmptyStatement`) | BSD-3-Clause |
-| C++ | clang-tidy (`bugprone-empty-catch`) | Apache-2.0 WITH LLVM-exception |
-| Swift | SwiftLint | MIT |
-| C# (.NET) | SonarAnalyzer.CSharp 9.32.0.97167, in your project's own build | LGPL-3.0-only |
+| C, C++ | clang-tidy (Clang Static Analyzer core, C++, dead-code and Unix checks; bugprone checks; see [collect.md](collect.md#c-and-c-defect-rules)) | Apache-2.0 WITH LLVM-exception |
+| C, C++ | Cppcheck (null, leak, use-after-free, bounds, overflow, division-by-zero, uninitialised and condition defects; see [collect.md](collect.md#c-and-c-defect-rules)) | GPL-3.0-or-later |
+| Swift | SwiftLint (your configuration; and a second run with only its defect rules; see [collect.md](collect.md#swift-swiftlint)) | MIT |
+| C# (.NET) | SonarAnalyzer.CSharp 9.32.0.97167 and the .NET SDK analyzers, in your project's own build (see [collect.md](collect.md#c-sonaranalyzer-and-the-net-analyzers)) | LGPL-3.0-only |
 
 eslint-plugin-sonarjs and SonarAnalyzer.CSharp are used at their **last
 releases under LGPL-3.0-only**: every later release is under a

@@ -15,6 +15,8 @@ fn every_manifest_maps_to_its_ecosystem() {
         ("requirements-dev.txt", Ecosystem::Python),
         ("go.mod", Ecosystem::Go),
         ("App.csproj", Ecosystem::Dotnet),
+        ("App.sln", Ecosystem::Dotnet),
+        ("App.slnx", Ecosystem::Dotnet),
         ("pom.xml", Ecosystem::Jvm),
         ("build.gradle", Ecosystem::Jvm),
         ("build.gradle.kts", Ecosystem::Jvm),
@@ -33,6 +35,7 @@ fn every_manifest_maps_to_its_ecosystem() {
         "my-requirements.txt",
         "Cargo.lock",
         "csproj",
+        "sln",
         "sh",
     ] {
         assert_eq!(Ecosystem::of_file(file), None, "{file}");

@@ -425,7 +425,7 @@ fn missing_local_exits_3_with_a_hint() {
 
 /// Every entry that runs on the fixture, with the exit code the fake
 /// runtime's tool reports findings with and the report it writes.
-const RAN: [(&str, i64, &str); 21] = [
+const RAN: [(&str, i64, &str); 23] = [
     ("gitleaks", 0, "gitleaks.sarif"),
     ("gitleaks-history", 0, "gitleaks.history.sarif"),
     ("osv-scanner", 1, "osv-scanner.sarif"),
@@ -442,7 +442,9 @@ const RAN: [(&str, i64, &str); 21] = [
     ("dependency-cruiser", 0, "dependency-cruiser.sarif"),
     ("staticcheck", 1, "staticcheck.sarif"),
     ("golangci-lint", 1, "golangci.sarif"),
+    ("golangci-lint-defects", 1, "golangci-defects.sarif"),
     ("swiftlint", 2, "swiftlint.sarif"),
+    ("swiftlint-defects", 2, "swiftlint-defects.sarif"),
     ("scorecard-license", 0, "scorecard-license.sarif"),
     ("jscpd", 0, "jscpd.sarif"),
     ("coverage.py", -1, ""),
@@ -458,7 +460,7 @@ fn collect_runs_pinned_images_and_check_reads_their_reports() {
     assert_eq!(out.status.code(), Some(0), "exit 0: {stdout}");
     assert!(
         stdout.contains(
-            "sloptopop collect: 19 ran, 0 failed, 0 missing, 2 skipped (ecosystems: go, node, python, swift)\n"
+            "sloptopop collect: 21 ran, 0 failed, 0 missing, 2 skipped (ecosystems: go, node, python, swift)\n"
         ),
         "{stdout}"
     );

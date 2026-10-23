@@ -170,14 +170,43 @@ fn depcruise_violations_name_their_cycle() {
     assert_eq!(info["message"]["text"], "src/c.ts → src/d.ts");
 }
 
+/// A rule list for the converter tests: two reported checks, one off.
+const LISTED: &[Rule] = &[
+    Rule {
+        id: "bugprone-empty-catch",
+        class: Defect::SwallowedError,
+        reason: "an empty handler",
+        off: None,
+    },
+    Rule {
+        id: "bugprone-off",
+        class: Defect::Overflow,
+        reason: "a check that is off",
+        off: Some("below the precision budget"),
+    },
+    Rule {
+        id: "bugprone-x",
+        class: Defect::WrongOperator,
+        reason: "a reported check",
+        off: None,
+    },
+];
+
+fn run_of(sarif: &str) -> Value {
+    let document: Value = serde_json::from_str(sarif).unwrap();
+    document["runs"][0].clone()
+}
+
 #[test]
-fn clang_tidy_keeps_only_requested_checks() {
+fn clang_tidy_keeps_only_reported_checks() {
     let raw = b"# sloptopop-clang-tidy: no compile database, files parsed as -std=c++17
 /src/src/main.cpp:1:10: error: 'stdexcept' file not found [clang-diagnostic-error]
     1 | #include <stdexcept>
 /src/src/main.cpp:7:5: warning: empty catch statements hide issues; to handle exceptions appropriately, consider re-throwing, handling, or avoiding catch altogether [bugprone-empty-catch]
 /src/src/main.cpp:7:5: warning: empty catch statements hide issues; to handle exceptions appropriately, consider re-throwing, handling, or avoiding catch altogether [bugprone-empty-catch]
 ./b.cc:3:1: error: bad thing [bugprone-x,cert-y]
+./b.cc:4:1: warning: off by default [bugprone-off]
+./b.cc:5:1: warning: not listed [bugprone-unlisted]
 not a diagnostic [bugprone-empty-catch]
 no checks]
 a.cc: warning: m [bugprone-empty-catch]
@@ -187,16 +216,15 @@ a.cc:1:y: warning: m [bugprone-empty-catch]
 a.cc:2:3: note: m [bugprone-empty-catch]
 :2:3: warning: m [bugprone-empty-catch]
 ";
-    let found = results(
-        &convert(
-            Converter::ClangTidy,
-            raw,
-            "clang-tidy",
-            "19.1.0-1",
-            Path::new(NOWHERE),
-        )
-        .unwrap(),
-    );
+    let sarif = convert(
+        Converter::ClangTidy(LISTED),
+        raw,
+        "clang-tidy",
+        "19.1.0-1",
+        Path::new(NOWHERE),
+    )
+    .unwrap();
+    let found = results(&sarif);
     // Sorted by file: the one without a path first; duplicates dropped.
     assert_eq!(found.len(), 3, "{found:?}");
     assert!(found[0].get("locations").is_none(), "no path, no location");
@@ -212,6 +240,77 @@ a.cc:2:3: note: m [bugprone-empty-catch]
             .unwrap()
             .starts_with("empty catch statements hide issues"),
         "{found:?}"
+    );
+    for result in &found {
+        assert_eq!(
+            result["properties"],
+            json!({ "confidence": "lower" }),
+            "no compile database"
+        );
+    }
+    let run = run_of(&sarif);
+    assert_eq!(
+        run["properties"],
+        json!({ "compileFlags": "no compile database, files parsed as -std=c++17" })
+    );
+    assert_eq!(
+        run["tool"]["driver"]["rules"],
+        json!([
+            { "id": "bugprone-empty-catch", "properties": { "defectClass": "DC17" } },
+            { "id": "bugprone-x", "properties": { "defectClass": "DC16" } },
+        ])
+    );
+}
+
+#[test]
+fn a_compile_database_keeps_the_confidence_and_a_missing_line_lowers_it() {
+    let with_database = b"# sloptopop-clang-tidy: compile database build/compile_commands.json
+/src/a.cc:2:3: warning: m [bugprone-x]
+";
+    let sarif = convert(
+        Converter::ClangTidy(LISTED),
+        with_database,
+        "clang-tidy",
+        "v",
+        Path::new(NOWHERE),
+    )
+    .unwrap();
+    assert!(results(&sarif)[0].get("properties").is_none(), "{sarif}");
+    assert_eq!(
+        run_of(&sarif)["properties"]["compileFlags"],
+        "compile database build/compile_commands.json"
+    );
+    for raw in [
+        &b"/src/a.cc:2:3: warning: m [bugprone-x]\n"[..],
+        b"# other: x\n/src/a.cc:2:3: warning: m [bugprone-x]",
+    ] {
+        let unstated = convert(
+            Converter::ClangTidy(LISTED),
+            raw,
+            "clang-tidy",
+            "v",
+            Path::new(NOWHERE),
+        )
+        .unwrap();
+        assert_eq!(results(&unstated).len(), 1, "the first line is still read");
+        assert_eq!(results(&unstated)[0]["properties"]["confidence"], "lower");
+        assert_eq!(
+            run_of(&unstated)["properties"]["compileFlags"],
+            "not stated"
+        );
+    }
+    let header_only = convert(
+        Converter::ClangTidy(LISTED),
+        b"# sloptopop-clang-tidy: compile database ./compile_commands.json",
+        "clang-tidy",
+        "v",
+        Path::new(NOWHERE),
+    )
+    .unwrap();
+    assert_eq!(results(&header_only), Vec::<Value>::new());
+    assert_eq!(
+        run_of(&header_only)["properties"]["compileFlags"],
+        "compile database ./compile_commands.json"
     );
 }
 
@@ -254,6 +353,15 @@ fn unreadable_output_is_an_error_never_an_empty_report() {
     assert_eq!(depcruise, "dependency-cruiser JSON: no violations array");
     let ruff = convert(Converter::RuffJson, b"[", "ruff", "v", Path::new(NOWHERE)).unwrap_err();
     assert!(ruff.starts_with("ruff printed no readable JSON"), "{ruff}");
+    let cppcheck = convert(
+        Converter::Cppcheck(LISTED),
+        b"# sloptopop-cppcheck: no compile database\ncppcheck: error: could not find or open any of the paths given.\n",
+        "cppcheck",
+        "v",
+        Path::new(NOWHERE),
+    )
+    .unwrap_err();
+    assert_eq!(cppcheck, "Cppcheck printed no XML report");
 }
 
 #[test]
@@ -266,7 +374,16 @@ fn normalizing_drops_times_and_help_and_sorts_rules() {
             "extensions":[{"name":"x","rules":[{"id":"E1","help":{"text":"e"}}]}]},
         "invocations":[{"startTimeUtc":"2026-10-21T07:40:50Z","endTimeUtc":"2026-10-21T07:41:00Z","executionSuccessful":true},"x"],
         "results":[{"ruleId":"SA4003","ruleIndex":1,"rule":{"index":1}},{"ruleId":"SA4026","ruleIndex":0},{"ruleId":"Q","ruleIndex":9},{"ruleId":"R"}]}]}"#;
-    let sarif = normalize(raw, "staticcheck", "v", None, Path::new(NOWHERE)).unwrap();
+    let sarif = normalize(
+        raw,
+        "staticcheck",
+        "v",
+        None,
+        &[],
+        false,
+        Path::new(NOWHERE),
+    )
+    .unwrap();
     let document: Value = serde_json::from_str(&sarif).unwrap();
     let run = &document["runs"][0];
     let rules = run["tool"]["driver"]["rules"].as_array().unwrap();
@@ -310,6 +427,8 @@ fn normalizing_drops_times_and_help_and_sorts_rules() {
             "staticcheck",
             "v",
             None,
+            &[],
+            false,
             Path::new(NOWHERE)
         )
         .unwrap(),
@@ -327,9 +446,10 @@ fn paths_under_the_container_root_become_relative() {
         "results":[{"ruleId":"r","locations":[{"physicalLocation":{"artifactLocation":{"uri":"/src/src/d.ts","index":0}}}]},
                    {"ruleId":"s","locations":[{"physicalLocation":{"artifactLocation":{"uri":"/src"}}}]},
                    {"ruleId":"t","properties":{"note":1,"flag":true,"nothing":null,"uri":7}}]}]}"#;
-    let document: Value =
-        serde_json::from_str(&normalize(raw, "eslint", "v", None, Path::new(NOWHERE)).unwrap())
-            .unwrap();
+    let document: Value = serde_json::from_str(
+        &normalize(raw, "eslint", "v", None, &[], false, Path::new(NOWHERE)).unwrap(),
+    )
+    .unwrap();
     let run = &document["runs"][0];
     assert_eq!(
         run["originalUriBaseIds"],
@@ -356,6 +476,8 @@ fn paths_under_the_container_root_become_relative() {
         "t",
         "v",
         None,
+        &[],
+        false,
         Path::new(NOWHERE),
     )
     .unwrap();
@@ -370,7 +492,16 @@ fn compiler_analyzer_timings_are_dropped() {
             {"id":"S108","properties":{"category":"Major Code Smell","executionTimeInSeconds":"0.008","executionTimeInPercentage":"<1"}},
             {"id":"S2486","properties":"odd"}]}}}]}"#;
     let document: Value = serde_json::from_str(
-        &normalize(raw, "sonaranalyzer-csharp", "v", None, Path::new(NOWHERE)).unwrap(),
+        &normalize(
+            raw,
+            "sonaranalyzer-csharp",
+            "v",
+            None,
+            &[],
+            false,
+            Path::new(NOWHERE),
+        )
+        .unwrap(),
     )
     .unwrap();
     let run = &document["runs"][0];
@@ -389,11 +520,22 @@ fn normalizing_handles_runs_without_rules_and_no_output() {
         "t",
         "v",
         None,
+        &[],
+        false,
         Path::new(NOWHERE),
     )
     .unwrap();
     assert!(bare.contains("\"name\": \"t\""), "{bare}");
-    let empty = normalize(b"  \n", "osv-scanner", "2.7.0-1", None, Path::new(NOWHERE)).unwrap();
+    let empty = normalize(
+        b"  \n",
+        "osv-scanner",
+        "2.7.0-1",
+        None,
+        &[],
+        false,
+        Path::new(NOWHERE),
+    )
+    .unwrap();
     assert_eq!(results(&empty).len(), 0);
     assert!(
         empty.contains("osv-scanner") && empty.contains("2.7.0-1"),
@@ -404,11 +546,14 @@ fn normalizing_handles_runs_without_rules_and_no_output() {
         "bandit",
         "v",
         None,
+        &[],
+        false,
         Path::new(NOWHERE),
     )
     .unwrap_err();
     assert_eq!(error, "bandit SARIF: no runs array");
-    let unreadable = normalize(b"{", "bandit", "v", None, Path::new(NOWHERE)).unwrap_err();
+    let unreadable =
+        normalize(b"{", "bandit", "v", None, &[], false, Path::new(NOWHERE)).unwrap_err();
     assert!(
         unreadable.starts_with("bandit wrote no readable SARIF"),
         "{unreadable}"
@@ -446,6 +591,8 @@ fn staticcheck_fixes_are_utf8_columns_and_reproduce_golangci_lint_fix() {
             "staticcheck",
             "2026.2.2-1",
             Some(Columns::Utf8Bytes),
+            &[],
+            false,
             &root,
         )
         .unwrap(),
@@ -487,7 +634,16 @@ cd
     )
     .unwrap();
     let run = |fixes: Value, native: Option<Columns>| -> Value {
-        let sarif = normalize(&with_fixes(&fixes), "staticcheck", "v", native, &root.0).unwrap();
+        let sarif = normalize(
+            &with_fixes(&fixes),
+            "staticcheck",
+            "v",
+            native,
+            &[],
+            false,
+            &root.0,
+        )
+        .unwrap();
         serde_json::from_str::<Value>(&sarif).unwrap()["runs"][0].clone()
     };
     let reasons = |normalized: &Value| -> Vec<String> {
@@ -535,6 +691,8 @@ cd
         "t",
         "v",
         None,
+        &[],
+        false,
         &root.0,
     )
     .unwrap();
@@ -546,7 +704,16 @@ fn written_deletions_and_carriers_survive_normalizing() {
     let root = TempDir::new();
     fs::write(root.0.join("a.go"), "ab\ncd\n").unwrap();
     let run = |fixes: Value, native: Option<Columns>| -> Value {
-        let sarif = normalize(&with_fixes(&fixes), "staticcheck", "v", native, &root.0).unwrap();
+        let sarif = normalize(
+            &with_fixes(&fixes),
+            "staticcheck",
+            "v",
+            native,
+            &[],
+            false,
+            &root.0,
+        )
+        .unwrap();
         serde_json::from_str::<Value>(&sarif).unwrap()["runs"][0].clone()
     };
     let good = fix_in(&json!("a.go"), (1, 1), (1, 2));
@@ -566,18 +733,259 @@ fn written_deletions_and_carriers_survive_normalizing() {
         "staticcheck",
         "v",
         Some(Columns::Utf8Bytes),
+        &[],
+        false,
         &root.0,
     )
     .unwrap();
-    let twice = normalize(once.as_bytes(), "staticcheck", "v", None, &root.0).unwrap();
+    let twice = normalize(
+        once.as_bytes(),
+        "staticcheck",
+        "v",
+        None,
+        &[],
+        false,
+        &root.0,
+    )
+    .unwrap();
     assert_eq!(once, twice);
     let odd = normalize(
         &with_fixes(&json!("not a list")),
         "staticcheck",
         "v",
         None,
+        &[],
+        false,
         &root.0,
     )
     .unwrap();
     assert!(odd.contains("not a list"), "a non-array is not a fix list");
+}
+
+#[test]
+fn clang_tidy_keeps_its_errors_as_notifications_never_as_results() {
+    let raw = b"# sloptopop-clang-tidy: compile database build/compile_commands.json
+/src/b.c:3:1: error: 'asm/errno.h' file not found [clang-diagnostic-error]
+/src/b.c:3:1: error: 'asm/errno.h' file not found [clang-diagnostic-error]
+/src/a.c:9:2: warning: implicit declaration [clang-diagnostic-implicit-function-declaration]
+/src/a.c:2:3: warning: m [bugprone-x]
+/src/a.c:4:3: error: also off [bugprone-off]
+5 warnings and 1 error generated.
+Error while processing /src/b.c.
+error: no such file: /home/dev/a.c (listed in the compile database)
+LLVM ERROR: Cannot chdir into \"/home/dev/build\"!
+Error reading configuration from /home/dev: directory doesn't exist.
+ error: indented
+";
+    let sarif = convert(
+        Converter::ClangTidy(LISTED),
+        raw,
+        "clang-tidy",
+        "v",
+        Path::new(NOWHERE),
+    )
+    .unwrap();
+    let found = results(&sarif);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0]["ruleId"], "bugprone-x");
+    let run = run_of(&sarif);
+    assert_eq!(
+        run["invocations"],
+        json!([{
+            "executionSuccessful": true,
+            "toolExecutionNotifications": [
+                { "level": "error", "message": { "text": "Error while processing /src/b.c." } },
+                { "level": "error", "message": { "text": "LLVM ERROR: Cannot chdir into \"/home/dev/build\"!" } },
+                { "level": "error", "message": { "text": "error: no such file: /home/dev/a.c (listed in the compile database)" } },
+                {
+                    "level": "error",
+                    "message": { "text": "also off" },
+                    "descriptor": { "id": "bugprone-off" },
+                    "locations": [{ "physicalLocation": {
+                        "artifactLocation": { "uri": "a.c" },
+                        "region": { "startLine": 4, "startColumn": 3 },
+                    }}],
+                },
+                {
+                    "level": "error",
+                    "message": { "text": "'asm/errno.h' file not found" },
+                    "descriptor": { "id": "clang-diagnostic-error" },
+                    "locations": [{ "physicalLocation": {
+                        "artifactLocation": { "uri": "b.c" },
+                        "region": { "startLine": 3, "startColumn": 1 },
+                    }}],
+                },
+            ],
+        }]),
+        "sorted, unique, and the compiler's warnings are not errors"
+    );
+    let clean = convert(
+        Converter::ClangTidy(LISTED),
+        b"# sloptopop-clang-tidy: x\n/src/a.c:2:3: warning: m [bugprone-x]\n",
+        "clang-tidy",
+        "v",
+        Path::new(NOWHERE),
+    )
+    .unwrap();
+    assert!(run_of(&clean).get("invocations").is_none(), "{clean}");
+}
+
+#[test]
+fn unordered_results_are_sorted_by_location_rule_and_message() {
+    let raw = br#"{"runs":[{"tool":{"driver":{"name":"t"}},"results":[
+        {"ruleId":"b","message":{"text":"5"},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"/src/b.cs"},"region":{"startLine":1,"startColumn":1}}}]},
+        {"ruleId":"b","message":{"text":"4"},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"/src/a.cs"},"region":{"startLine":2,"startColumn":1}}}]},
+        {"ruleId":"b","message":{"text":"3"},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"/src/a.cs"},"region":{"startLine":1,"startColumn":9}}}]},
+        {"ruleId":"b","message":{"text":"2"},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"/src/a.cs"},"region":{"startLine":1,"startColumn":1}}}]},
+        {"ruleId":"a","message":{"text":"9"},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"/src/a.cs"},"region":{"startLine":1,"startColumn":1}}}]},
+        {"ruleId":"a","message":{"text":"8"},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"/src/a.cs"},"region":{"startLine":1,"startColumn":1}}}]},
+        {"ruleId":"a","message":{"text":"1"}},
+        {"ruleId":"a","message":{"text":"1"},"level":"note"}
+    ]}]}"#;
+    let texts = |unordered: bool| -> Vec<String> {
+        let run =
+            run_of(&normalize(raw, "t", "v", None, &[], unordered, Path::new("/src")).unwrap());
+        run["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|result| format!("{}{}", result["message"]["text"], result["level"]))
+            .collect()
+    };
+    assert_eq!(
+        texts(true),
+        [
+            "\"1\"null",
+            "\"1\"\"note\"",
+            "\"8\"null",
+            "\"9\"null",
+            "\"2\"null",
+            "\"3\"null",
+            "\"4\"null",
+            "\"5\"null"
+        ],
+        "no location first; then file, line, column, rule, message; equal ones in the tool's order"
+    );
+    assert_eq!(texts(false)[0], "\"5\"null", "the tool's order");
+    let none = normalize(
+        br#"{"runs":[{"tool":{"driver":{"name":"t"}}}]}"#,
+        "t",
+        "v",
+        None,
+        &[],
+        true,
+        Path::new(NOWHERE),
+    )
+    .unwrap();
+    assert!(run_of(&none).get("results").is_none());
+}
+
+#[test]
+fn listed_rules_with_results_but_no_descriptor_get_one() {
+    // golangci-lint's shape: results, no rules.
+    let raw = br#"{"runs":[{"tool":{"driver":{"name":"t"}},"results":[
+        {"ruleId":"bugprone-x","message":{"text":"a"}},
+        {"ruleId":"bugprone-x","message":{"text":"b"}},
+        {"ruleId":"bugprone-off","message":{"text":"dropped"}},
+        {"ruleId":"unlisted","message":{"text":"kept"}}
+    ]}]}"#;
+    let run = run_of(&normalize(raw, "t", "v", None, LISTED, false, Path::new(NOWHERE)).unwrap());
+    assert_eq!(
+        run["tool"]["driver"]["rules"],
+        json!([{ "id": "bugprone-x", "properties": { "defectClass": "DC16" } }]),
+        "one each, on rules only"
+    );
+    assert_eq!(run["results"].as_array().unwrap().len(), 3);
+    // Beside the tool's own descriptors, sorted, with their indexes moved;
+    // one an extension describes gets none.
+    let beside = br#"{"runs":[{"tool":{"driver":{"name":"t","rules":[{"id":"unlisted"}]},
+        "extensions":[{"name":"e","rules":[{"id":"bugprone-empty-catch"}]}]},
+    "results":[
+        {"ruleId":"unlisted","ruleIndex":0,"message":{"text":"u"}},
+        {"ruleId":"bugprone-x","message":{"text":"x"}},
+        {"rule":{"id":"bugprone-empty-catch"},"message":{"text":"e"}}
+    ]}]}"#;
+    let sorted =
+        run_of(&normalize(beside, "t", "v", None, LISTED, false, Path::new(NOWHERE)).unwrap());
+    assert_eq!(
+        sorted["tool"]["driver"]["rules"],
+        json!([
+            { "id": "bugprone-x", "properties": { "defectClass": "DC16" } },
+            { "id": "unlisted" },
+        ])
+    );
+    assert_eq!(sorted["results"][0]["ruleIndex"], 1, "moved");
+    // Nothing missing: no rules array appears; a driver that is not an
+    // object, or rules that are not an array, stay as written.
+    for (odd, driver) in [
+        (
+            r#"{"runs":[{"tool":{"driver":{"name":"t"}},"results":[{"ruleId":"unlisted"}]}]}"#,
+            json!({ "name": "t" }),
+        ),
+        (
+            r#"{"runs":[{"tool":{"driver":"odd"},"results":[{"ruleId":"bugprone-x"}]}]}"#,
+            json!("odd"),
+        ),
+        (
+            r#"{"runs":[{"tool":{"driver":{"rules":"odd"}},"results":[{"ruleId":"bugprone-x"}]}]}"#,
+            json!({ "rules": "odd" }),
+        ),
+    ] {
+        let kept = run_of(
+            &normalize(
+                odd.as_bytes(),
+                "t",
+                "v",
+                None,
+                LISTED,
+                false,
+                Path::new(NOWHERE),
+            )
+            .unwrap(),
+        );
+        assert_eq!(kept["tool"]["driver"], driver, "{odd}");
+    }
+}
+
+#[test]
+fn listed_defect_rules_get_their_class_and_off_ones_lose_their_results() {
+    let raw = br#"{"runs":[{"tool":{"driver":{"name":"t","rules":[
+        {"id":"bugprone-x","properties":{"tags":["a"]}},
+        {"id":"bugprone-off"},
+        {"id":"unlisted"},
+        "odd"
+    ]},"extensions":[{"name":"e","rules":[{"id":"bugprone-off","properties":"odd"}]},{"name":"none"}]},
+    "results":[
+        {"ruleId":"bugprone-x","message":{"text":"kept"}},
+        {"ruleId":"bugprone-off","message":{"text":"dropped"}},
+        {"rule":{"id":"bugprone-off"},"message":{"text":"dropped too"}},
+        {"ruleId":"unlisted","message":{"text":"kept as written"}},
+        {"message":{"text":"no rule"}}
+    ]}]}"#;
+    let sarif = normalize(raw, "t", "v", None, LISTED, false, Path::new(NOWHERE)).unwrap();
+    let run = run_of(&sarif);
+    assert_eq!(
+        run["tool"]["driver"]["rules"],
+        json!([
+            "odd",
+            { "id": "bugprone-off", "properties": { "defectClass": "DC08" } },
+            { "id": "bugprone-x", "properties": { "defectClass": "DC16", "tags": ["a"] } },
+            { "id": "unlisted" },
+        ])
+    );
+    assert_eq!(
+        run["tool"]["extensions"][0]["rules"],
+        json!([{ "id": "bugprone-off", "properties": "odd" }]),
+        "properties that are not an object stay as written"
+    );
+    let texts: Vec<&str> = run["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|result| result["message"]["text"].as_str().unwrap())
+        .collect();
+    assert_eq!(texts, ["kept", "kept as written", "no rule"]);
+    let untouched = normalize(raw, "t", "v", None, &[], false, Path::new(NOWHERE)).unwrap();
+    assert_eq!(run_of(&untouched)["results"].as_array().unwrap().len(), 5);
+    assert!(!untouched.contains("defectClass"));
 }

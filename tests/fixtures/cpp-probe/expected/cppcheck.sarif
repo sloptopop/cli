@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "properties": {
+        "compileFlags": "no compile database, files parsed as -std=c17 / -std=c++17"
+      },
+      "results": [
+        {
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "bound.c"
+                },
+                "region": {
+                  "startColumn": 13,
+                  "startLine": 5
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Array 'copy[9]' accessed at index 9, which is out of bounds."
+          },
+          "properties": {
+            "confidence": "lower"
+          },
+          "ruleId": "arrayIndexOutOfBounds"
+        },
+        {
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "bound.c"
+                },
+                "region": {
+                  "startColumn": 22,
+                  "startLine": 6
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Array 'copy[9]' accessed at index 9, which is out of bounds."
+          },
+          "properties": {
+            "confidence": "lower"
+          },
+          "ruleId": "arrayIndexOutOfBounds"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "name": "cppcheck",
+          "rules": [
+            {
+              "id": "arrayIndexOutOfBounds",
+              "properties": {
+                "defectClass": "DC06"
+              }
+            }
+          ],
+          "version": "2.17.1-2"
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

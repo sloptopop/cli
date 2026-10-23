@@ -595,6 +595,9 @@ impl Run<'_> {
                         .env
                         .iter()
                         .map(|&(n, v)| (n.to_owned(), v.to_owned()))
+                        .chain(entry.tool.root_variable.map(|name| {
+                            (name.to_owned(), self.root.to_string_lossy().into_owned())
+                        }))
                         .collect(),
                     mounts,
                     entrypoint: entry.tool.command,

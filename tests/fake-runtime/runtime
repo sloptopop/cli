@@ -129,6 +129,7 @@ run)
     pylint) echo '{"messages":[]}'; exit 0 ;;
     depcruise) echo '{"summary":{"violations":[]}}'; exit 0 ;;
     sloptopop-clang-tidy) echo "# sloptopop-clang-tidy: no compile database"; exit 0 ;;
+    sloptopop-cppcheck) printf '# sloptopop-cppcheck: no compile database\n<results version="2"><errors/></results>\n'; exit 0 ;;
     jscpd) echo "$sarif" > .sloptopop/reports/jscpd.sarif; exit 0 ;;
     opengrep|semgrep) echo '{"results":[],"errors":[]}'; exit 0 ;;
     biome) echo '{"diagnostics":[]}'; exit 1 ;;

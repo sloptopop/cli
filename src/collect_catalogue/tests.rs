@@ -4,10 +4,11 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use super::*;
+use crate::collect_convert::{Defect, Rule};
 
 /// Every licence the catalogue may claim. A claim is only allowed with the
 /// licence files it was read from (`licence_files`), checked below.
-const LICENCES: [&str; 11] = [
+const LICENCES: [&str; 12] = [
     "MIT",
     "Apache-2.0",
     "BSD-3-Clause",
@@ -17,6 +18,7 @@ const LICENCES: [&str; 11] = [
     "LGPL-2.1-only",
     "GPL-2.0-or-later",
     "GPL-3.0-only",
+    "GPL-3.0-or-later",
     "LGPL-3.0-only",
     "Apache-2.0 WITH LLVM-exception",
 ];
@@ -68,6 +70,7 @@ fn the_required_tools_are_catalogued() {
         "pmd",
         "detekt",
         "clang-tidy",
+        "cppcheck",
         "cargo-llvm-cov",
         "coverage.py",
         "c8",
@@ -167,6 +170,7 @@ fn every_licence_was_read_from_a_licence_file_at_a_release() {
                     "LICENSE-MIT",
                     "LICENSE-APACHE",
                     "licence.txt",
+                    "COPYING",
                 ]
                 .contains(&name)
                     || name.ends_with(".nuspec"),
@@ -327,7 +331,9 @@ fn documented_entries_run_nowhere() {
 fn only_the_go_analyzers_and_the_dotnet_build_need_a_prepare_step() {
     for tool in CATALOGUE {
         let expected = match tool.name {
-            "gosec" | "govulncheck" | "staticcheck" | "golangci-lint" => Some(Prepare::GoModules),
+            "gosec" | "govulncheck" | "staticcheck" | "golangci-lint" | "golangci-lint-defects" => {
+                Some(Prepare::GoModules)
+            }
             "sonaranalyzer-csharp" => Some(Prepare::DotnetRestore),
             _ => None,
         };
@@ -439,10 +445,6 @@ fn security_relevant_flags_are_present() {
     );
     assert!(has(entry("ruff"), &["--no-cache"]), "ruff writes nothing");
     assert!(
-        has(entry("ruff"), &["--extend-select", "S110,S501,N999"]),
-        "crown-jewel rules"
-    );
-    assert!(
         has(entry("swiftlint"), &["--no-cache"]),
         "swiftlint writes nothing"
     );
@@ -476,11 +478,203 @@ fn security_relevant_flags_are_present() {
         entry("scorecard-license").env,
         [("GITHUB_AUTH_TOKEN", "unused-in-local-mode")]
     );
+    assert!(
+        lint_defects::PMD_RULESETS
+            .split(',')
+            .any(|rule| rule == "category/java/errorprone.xml/EmptyCatchBlock"),
+        "the crown-jewel PMD rule"
+    );
     assert!(has(
-        entry("pmd"),
-        &["-R", "category/java/errorprone.xml/EmptyCatchBlock"]
+        entry("cppcheck"),
+        &[
+            "--enable=warning,performance,portability",
+            "--library=googletest",
+            "--library=/usr/share/sloptopop-cppcheck/tests.cfg"
+        ]
     ));
-    assert!(has(entry("clang-tidy"), &["-*,bugprone-empty-catch"]));
+}
+
+#[test]
+fn the_defect_runs_keep_the_crown_jewel_rules_and_their_own_configuration() {
+    let ruff = entry("ruff").argv(&[], false);
+    let select = ruff
+        .iter()
+        .skip_while(|arg| *arg != "--extend-select")
+        .nth(1)
+        .unwrap();
+    for crown_jewel in ["S110", "S501", "N999"] {
+        assert!(
+            select.split(',').any(|code| code == crown_jewel),
+            "crown-jewel rule {crown_jewel}"
+        );
+    }
+    assert!(
+        has(
+            entry("golangci-lint-defects"),
+            &["run", "--config=/opt/golangci-lint/defects.yml"]
+        ),
+        "the image's own configuration, never the project's"
+    );
+    assert!(
+        has(entry("swiftlint-defects"), &["--no-cache"]),
+        "swiftlint-defects writes nothing"
+    );
+}
+
+/// The C and C++ analyzers report exactly their listed defect rules.
+fn rules_of(name: &str) -> &'static [Rule] {
+    match entry(name).convert {
+        Some((Converter::ClangTidy(rules) | Converter::Cppcheck(rules), _)) => rules,
+        other => panic!("{name}: {other:?}"),
+    }
+}
+
+#[test]
+fn clang_tidy_runs_exactly_its_reported_checks() {
+    let reported: Vec<&str> = rules_of("clang-tidy")
+        .iter()
+        .filter(|rule| rule.off.is_none())
+        .map(|rule| rule.id)
+        .collect();
+    let checks = format!("-*,{}", reported.join(","));
+    assert_eq!(
+        entry("clang-tidy").args,
+        [Fixed(defects::CLANG_TIDY_CHECKS)]
+    );
+    assert_eq!(defects::CLANG_TIDY_CHECKS, checks);
+    assert!(
+        reported.contains(&"clang-analyzer-core.NullDereference")
+            && reported.contains(&"bugprone-empty-catch"),
+        "the null-dereference case and the swallowed-errors check"
+    );
+    for rule in rules_of("clang-tidy") {
+        assert!(
+            [
+                "bugprone-",
+                "clang-analyzer-core.",
+                "clang-analyzer-cplusplus.",
+                "clang-analyzer-deadcode.",
+                "clang-analyzer-unix.",
+            ]
+            .iter()
+            .any(|family| rule.id.starts_with(family)),
+            "{}: one of the enabled families",
+            rule.id
+        );
+    }
+}
+
+#[test]
+fn every_defect_rule_is_listed_once_with_its_reasons() {
+    let tagged: Vec<&str> = CATALOGUE
+        .iter()
+        .filter(|tool| !tool.defects.is_empty())
+        .map(|tool| tool.name)
+        .collect();
+    assert_eq!(
+        tagged,
+        [
+            "ruff",
+            "biome",
+            "eslint-sonarjs",
+            "eslint-typescript",
+            "golangci-lint-defects",
+            "swiftlint-defects",
+            "sonaranalyzer-csharp",
+            "pmd",
+            "detekt",
+            "clang-tidy",
+            "cppcheck"
+        ]
+    );
+    for name in tagged {
+        let rules = entry(name).defects;
+        let ids: Vec<&str> = rules.iter().map(|rule| rule.id).collect();
+        let mut sorted = ids.clone();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(ids, sorted, "{name}: sorted, each once");
+        for rule in rules {
+            assert!(
+                !rule.id.is_empty() && !rule.id.contains([',', ' ']),
+                "{name}: {}",
+                rule.id
+            );
+            assert!(rule.reason.len() > 10, "{name}: {}: what it finds", rule.id);
+            assert!(
+                rule.off.is_none_or(|why| why.len() > 10),
+                "{name}: {}: why it is off",
+                rule.id
+            );
+        }
+    }
+    assert_eq!(
+        Rule::reported(
+            rules_of("clang-tidy"),
+            "clang-analyzer-core.NullDereference"
+        )
+        .map(|rule| rule.class),
+        Some(Defect::NullDereference),
+        "the owner's case"
+    );
+    let redundant = rules_of("cppcheck")
+        .iter()
+        .find(|rule| rule.id == "nullPointerRedundantCheck")
+        .unwrap();
+    assert_eq!(redundant.class, Defect::NullDereference);
+    assert!(
+        redundant
+            .off
+            .is_some_and(|why| why.starts_with("precision 1/19")),
+        "listed, but below the precision budget"
+    );
+    for name in ["clang-tidy", "cppcheck"] {
+        assert_eq!(entry(name).defects, rules_of(name), "{name}: one table");
+    }
+}
+
+/// The ids of the rules of `rules`, in order.
+fn ids(rules: &[Rule]) -> Vec<&'static str> {
+    rules.iter().map(|rule| rule.id).collect()
+}
+
+#[test]
+fn the_linters_run_exactly_their_listed_defect_rules() {
+    let mut select: Vec<&str> = ids(lint_defects::RUFF_RULES);
+    select.extend(["N999", "S501"]);
+    select.sort_unstable();
+    assert_eq!(lint_defects::RUFF_SELECT, select.join(","));
+    assert!(has(
+        entry("ruff"),
+        &["--extend-select", lint_defects::RUFF_SELECT]
+    ));
+    let rulesets: Vec<&str> = lint_defects::PMD_RULESETS.split(',').collect();
+    let mut named: Vec<&str> = rulesets
+        .iter()
+        .map(|path| path.rsplit('/').next().unwrap())
+        .collect();
+    named.sort_unstable();
+    assert_eq!(named, ids(lint_defects::PMD_RULES));
+    for path in rulesets {
+        assert!(
+            path.starts_with("category/java/errorprone.xml/")
+                || path.starts_with("category/java/multithreading.xml/"),
+            "{path}"
+        );
+    }
+    assert!(has(entry("pmd"), &["-R", lint_defects::PMD_RULESETS]));
+    let argv = entry("swiftlint-defects").argv(&[], false);
+    let only: Vec<&str> = argv
+        .windows(2)
+        .filter(|pair| pair[0] == "--only-rule")
+        .map(|pair| pair[1].as_str())
+        .collect();
+    assert_eq!(only, ids(lint_defects::SWIFTLINT_DEFECT_RULES));
+    assert_eq!(
+        Rule::reported(lint_defects::GOLANGCI_DEFECT_RULES, "govet").map(|rule| rule.class),
+        Some(Defect::NullDereference),
+        "govet runs only nilness"
+    );
 }
 
 #[test]
@@ -492,8 +686,13 @@ fn scopes_follow_the_ecosystems() {
     assert!(entry("oxlint").applies(&BTreeSet::from([Ecosystem::Node])));
     assert!(entry("detekt").applies(&BTreeSet::from([Ecosystem::Jvm])));
     assert!(entry("phpcs").applies(&BTreeSet::from([Ecosystem::Php])));
-    assert!(entry("clang-tidy").applies(&BTreeSet::from([Ecosystem::Cpp])));
-    assert!(!entry("clang-tidy").applies(&BTreeSet::new()));
+    for name in ["clang-tidy", "cppcheck"] {
+        assert!(
+            entry(name).applies(&BTreeSet::from([Ecosystem::Cpp])),
+            "{name}"
+        );
+        assert!(!entry(name).applies(&BTreeSet::new()), "{name}");
+    }
 }
 
 /// The whole catalogue, every field of every entry, as reviewed: a change
@@ -559,6 +758,20 @@ fn fix_carrying_tools_run_in_their_fix_carrying_format() {
 }
 
 #[test]
+fn only_the_c_and_cpp_analyzers_learn_the_host_path_of_the_repository() {
+    for tool in CATALOGUE {
+        assert_eq!(
+            tool.root_variable,
+            ["clang-tidy", "cppcheck"]
+                .contains(&tool.name)
+                .then_some("SLOPTOPOP_HOST_ROOT"),
+            "{}",
+            tool.name
+        );
+    }
+}
+
+#[test]
 fn golangci_lint_names_the_configuration_it_refuses() {
     for tool in CATALOGUE {
         assert_eq!(
@@ -573,4 +786,54 @@ fn golangci_lint_names_the_configuration_it_refuses() {
     };
     assert_eq!(*needle, "unsupported version of the configuration");
     assert!(reason.contains("golangci-lint migrate") && reason.contains("no report"));
+}
+
+/// CPP-1: what the pinned clang-tidy and Cppcheck images printed for the
+/// null dereference after a null check (`tests/fixtures/cpp-probe/`), run
+/// through the catalogue's converters and the normalization, is the
+/// golden report, byte for byte, as `collect` writes it.
+#[test]
+fn the_cpp_probe_converts_to_the_golden_reports() {
+    let probe = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cpp-probe");
+    for name in ["clang-tidy", "cppcheck"] {
+        let tool = entry(name);
+        let (converter, raw_file) = tool.convert.unwrap();
+        let image = image(tool).unwrap();
+        let bytes = std::fs::read(probe.join(raw_file)).unwrap();
+        let from_raw =
+            crate::collect_convert::convert(converter, &bytes, name, image.version, &probe)
+                .unwrap();
+        let written = crate::collect_convert::normalize(
+            from_raw.as_bytes(),
+            name,
+            image.version,
+            tool.sarif_fixes,
+            tool.defects,
+            false,
+            &probe,
+        )
+        .unwrap();
+        let golden = std::fs::read_to_string(probe.join("expected").join(tool.output)).unwrap();
+        assert_eq!(written, golden, "{name}");
+        assert!(
+            written.contains("\"confidence\": \"lower\""),
+            "{name}: {written}"
+        );
+    }
+    let clang_tidy = std::fs::read_to_string(probe.join("expected/clang-tidy.sarif")).unwrap();
+    assert!(
+        clang_tidy.contains("clang-analyzer-core.NullDereference")
+            && clang_tidy.contains("\"DC01\"")
+    );
+    // Cppcheck finds the owner's case too, but its rule is off by default.
+    let raw = std::fs::read_to_string(probe.join("cppcheck.txt")).unwrap();
+    let cppcheck = std::fs::read_to_string(probe.join("expected/cppcheck.sarif")).unwrap();
+    assert!(
+        raw.contains("nullPointerRedundantCheck")
+            && !cppcheck.contains("nullPointerRedundantCheck")
+    );
+    assert!(
+        cppcheck.contains("\"DC06\""),
+        "the out-of-bounds write is reported: {cppcheck}"
+    );
 }

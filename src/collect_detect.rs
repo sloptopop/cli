@@ -14,7 +14,7 @@ use std::path::Path;
 pub(crate) enum Ecosystem {
     /// C and C++ (`CMakeLists.txt`).
     Cpp,
-    /// .NET (`*.csproj`).
+    /// .NET (`*.csproj`, or a solution: `*.sln`, `*.slnx`).
     Dotnet,
     /// Go (`go.mod`).
     Go,
@@ -69,7 +69,7 @@ impl Ecosystem {
             ("Package.swift", _) => Self::Swift,
             ("CMakeLists.txt", _) => Self::Cpp,
             (_, Some("txt")) if name.starts_with("requirements") => Self::Python,
-            (_, Some("csproj")) => Self::Dotnet,
+            (_, Some("csproj" | "sln" | "slnx")) => Self::Dotnet,
             (_, Some("psd1")) => Self::Powershell,
             (_, Some("sh")) => Self::Shell,
             _ => return None,

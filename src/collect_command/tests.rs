@@ -229,6 +229,39 @@ fn images_get_their_data_and_rules_mounted_read_only() {
 }
 
 #[test]
+fn the_c_and_cpp_analyzers_get_the_host_path_to_map_a_compile_database() {
+    let repo = Repo::new(&["CMakeLists.txt"]);
+    let ran = repo.run("docker");
+    assert_eq!(ran.code, Ok(0), "{}", ran.stderr);
+    let calls = repo.calls();
+    let line = |entrypoint: &str| {
+        calls
+            .lines()
+            .find(|line| line.contains(&format!("--entrypoint {entrypoint} ")))
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let root = repo.root.0.to_string_lossy();
+    for entrypoint in ["sloptopop-cppcheck", "sloptopop-clang-tidy"] {
+        assert!(
+            line(entrypoint).contains(&format!("--env SLOPTOPOP_HOST_ROOT={root} ")),
+            "{entrypoint}: {calls}"
+        );
+    }
+    assert_eq!(
+        calls.matches("SLOPTOPOP_HOST_ROOT").count(),
+        2,
+        "no other tool: {calls}"
+    );
+    let statuses = statuses(&repo.record());
+    assert!(
+        statuses.contains(&("cppcheck".to_owned(), "ran".to_owned()))
+            && statuses.contains(&("clang-tidy".to_owned(), "ran".to_owned())),
+        "{statuses:?}"
+    );
+}
+
+#[test]
 fn go_and_dotnet_prepare_their_dependencies_once() {
     let repo = Repo::new(&["go.mod", "app.csproj"]);
     let ran = repo.run("docker");
