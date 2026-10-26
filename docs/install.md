@@ -156,9 +156,21 @@ mirror or proxy, set `SLOPTOPOP_REGISTRY`. See
 
 ## Updates
 
-`sloptopop` and `sloptopop-local` contain no update check; `sloptopop`
-makes one network call, to the sloptopop server, when you run `check`,
-`fix` or `transform`. To update:
+`sloptopop` and `sloptopop-local` contain no update check and no
+telemetry. Only `check`, `fix` and `transform` go online, and only to the
+sloptopop server (the hosted one or your `--backend`), with `curl`:
+
+- one `POST /v1/jobs` with the request you confirmed (the files and
+  reports the manifest lists);
+- then `GET /v1/jobs/<id>` for the job's state, every 2 seconds at first,
+  backing off to every 5, until the answer is there; a poll that fails is
+  tried again up to 5 times, waiting 2 to 20 seconds;
+- one `DELETE /v1/jobs/<id>` once the answer is fetched, or when you stop
+  `sloptopop` with Ctrl-C.
+
+The polls and the `DELETE` send nothing but the job's id, which the
+server drew at random ([commands.md](commands.md#waiting-in-the-queue)).
+To update:
 
 | Installed with | Update |
 |---|---|

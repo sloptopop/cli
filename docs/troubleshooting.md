@@ -86,23 +86,23 @@ running…
 On a terminal this is one line, rewritten in place; in CI a new line
 appears only when the number changes. It goes to stderr only, so
 `--format json` output stays clean. Ctrl-C deletes the job on the server
-and exits 130. Every message below ends with exit code 4.
+and exits 130. Every error below ends with exit code 4.
 
-### `queue-full` (HTTP 503)
+### `the server is busy: N jobs queued, try again in M s` (HTTP 503 `queue-full`)
 
 ```text
-error: the backend at https://api.sloptopop.dev/v1/jobs did not answer: … 503 ({"error":{"code":"queue-full",…}})
+error: the server is busy: 50 jobs queued, try again in 30 s
 ```
 
 The queue holds as many projects as the server takes. Nothing was
 queued. Run the command again after a while (the server suggests 30
-seconds in `Retry-After`), or use your own self-hosted `sloptopop-engine`
+seconds), or use your own self-hosted `sloptopop-engine`
 with `--backend <url>`.
 
-### `per-ip` (HTTP 429)
+### `too many checks from this address at once` (HTTP 429 `per-ip`)
 
 ```text
-error: the backend at https://api.sloptopop.dev/v1/jobs did not answer: … 429 ({"error":{"code":"per-ip",…}})
+error: too many checks from this address at once: try again in 30 s, or once one of them has ended
 ```
 
 Your address already has as many projects queued or running as one
@@ -110,11 +110,27 @@ client may (2 on the hosted service). Wait for one to finish, or stop a
 run you do not need any more (Ctrl-C deletes its job). Several machines
 behind one NAT count as one address.
 
-### A `429` with no JSON body
+### `too many requests from this address: try again in M s`
 
-The edge in front of the server (rate limit per client) refused the
-request before it reached the queue. Wait a minute and run the command
-again.
+The edge in front of the server (rate limit per client: an HTTP `429`
+with no JSON body) refused the request before it reached the queue. Wait
+the time it names and run the command again. While a job waits, a poll
+refused this way is simply tried again.
+
+### `waiting: no answer from the server, try N of 5 in M s`
+
+A poll of your job got no answer (the network dropped, the server
+restarted its front) or a `429` or `5xx`. `sloptopop` keeps waiting and
+tries again, up to 5 times in a row; one good poll starts the count
+again. Nothing to do unless it gives up:
+
+```text
+error: gave up waiting for the job after 5 retries (…); run the command again
+```
+
+The reason in parentheses is the last poll's. The retries stay inside the
+2 minutes after which the server drops a job nobody polls, so a short
+outage costs you only the wait; after a longer one, run the command again.
 
 ### `error: the server refused the request: <code>: …`
 

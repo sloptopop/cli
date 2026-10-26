@@ -83,7 +83,7 @@ fn nothing_goes_without_a_yes_curl_or_a_server() {
     let (refused, said) = run(&fake_local(), &root, "http://refuses.test", true, b"");
     assert_eq!(refused, Err(UPLOAD_ERROR), "refused");
     assert!(
-        said.contains("the queue is full")
+        said.contains("error: the server is busy: 200 jobs queued, try again in 30 s\n")
             && said.contains("hint: sloptopop detects only on its server"),
         "{stderr}"
     );

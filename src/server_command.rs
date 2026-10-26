@@ -25,7 +25,7 @@ use std::path::Path;
 
 use serde_json::Value;
 
-use crate::backend_jobs::{Cancel, Progress, endpoint, submit, wait};
+use crate::backend_jobs::{Cancel, Progress, endpoint, pause, submit, wait};
 use crate::collect_lookup::find;
 use crate::command_io::parse_document;
 use crate::diagnostic::report;
@@ -133,6 +133,7 @@ pub(crate) fn exchange(
         (&answer, &response),
         locator.poll,
         &mut Progress::new(stderr, locator.terminal),
+        &mut pause,
     );
     cancel.now();
     if let Err(why) = waited {

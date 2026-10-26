@@ -3,23 +3,33 @@
 # logs "<method> <url>" to fake-curl.log next to its --output file, copies
 # a posted file (--data-binary @<file>) to <file>.posted, and answers by
 # the URL's host:
+# The status line and any Retry-After go to the --dump-header file.
 #   ok       POST: a queued job {"id":"j1",...,"statusUrl":"/v1/jobs/j1"};
 #            GET: the next line of fake-curl.script next to --output (the
 #            last line repeats), or a done job answering {"answered":true}
 #            without a script; a line "!<body>" answers <body> with HTTP 404
-#            (exit 22), a line "x" fails to connect (exit 7); DELETE:
-#            nothing, exit 0
+#            (exit 22), a line "x" fails to connect (exit 7), a line
+#            "~<status> <retry-after|-> [<body>]" answers <body> with that
+#            status (exit 22); DELETE: nothing, exit 0
 #   odd      answers {} to everything, exit 0
-#   refuses  writes a JSON error to --output, exit 22 (--fail-with-body)
+#   refuses  503 queue-full (Retry-After: 30), exit 22 (--fail-with-body)
+#   limited  429 per-ip (Retry-After: 30), exit 22
+#   edge     429 with no body (Retry-After: 12), as Caddy's rate limit
 #   down     writes nothing, exit 7 (could not connect)
 echo "fake-curl: $*" >&2
 out=
+headers=/dev/null
 data=
 url=
 method=GET
+# respond <status> <retry-after|->: the header dump.
+respond() {
+  { printf 'HTTP/1.1 %s\r\n' "$1"; [ "$2" = - ] || printf 'Retry-After: %s\r\n' "$2"; printf '\r\n'; } > "$headers"
+}
 while [ $# -gt 0 ]; do
   case $1 in
     --output) out=$2; shift ;;
+    --dump-header) headers=$2; shift ;;
     --data-binary) data=${2#@}; method=POST; shift ;;
     --request) method=$2; shift ;;
     --proto|--header|--user-agent) shift ;;
@@ -33,16 +43,19 @@ echo "$method $url" >> "$dir/fake-curl.log"
 [ -n "$data" ] && cp "$data" "$data.posted"
 case $url in
   http://ok*|https://ok*) ;;
-  http://odd*) printf '%s' '{}' > "$out"; exit 0 ;;
-  http://refuses*) printf '%s' '{"error":{"code":"queue-full","message":"the queue is full (200 jobs); retry later"}}' > "$out"; echo "curl: (22) The requested URL returned error: 503" >&2; exit 22 ;;
+  http://odd*) respond 200 -; printf '%s' '{}' > "$out"; exit 0 ;;
+  http://refuses*) respond 503 30; printf '%s' '{"error":{"code":"queue-full","message":"the queue is full (200 jobs); retry later"}}' > "$out"; echo "curl: (22) The requested URL returned error: 503" >&2; exit 22 ;;
+  http://limited*) respond 429 30; printf '%s' '{"error":{"code":"per-ip","message":"at most 2 jobs per client may be queued or running; retry when one ends"}}' > "$out"; echo "curl: (22) The requested URL returned error: 429" >&2; exit 22 ;;
+  http://edge*) respond 429 12; : > "$out"; echo "curl: (22) The requested URL returned error: 429" >&2; exit 22 ;;
   *) echo "curl: (7) Failed to connect" >&2; exit 7 ;;
 esac
 case $method in
-  POST) printf '%s' '{"id":"j1","position":0,"statusUrl":"/v1/jobs/j1"}' > "$out"; exit 0 ;;
-  DELETE) : > "$out"; exit 0 ;;
+  POST) respond 202 -; printf '%s' '{"id":"j1","position":0,"statusUrl":"/v1/jobs/j1"}' > "$out"; exit 0 ;;
+  DELETE) respond 204 -; : > "$out"; exit 0 ;;
 esac
 script="$dir/fake-curl.script"
 if [ ! -f "$script" ]; then
+  respond 200 -
   printf '%s' '{"state":"done","response":{"answered":true}}' > "$out"
   exit 0
 fi
@@ -53,6 +66,14 @@ answer=$(sed -n "${n}p" "$script")
 [ -n "$answer" ] || answer=$(tail -n 1 "$script")
 case $answer in
   x) echo "curl: (7) Failed to connect" >&2; exit 7 ;;
-  !*) printf '%s' "${answer#!}" > "$out"; echo "curl: (22) The requested URL returned error: 404" >&2; exit 22 ;;
+  !*) respond 404 -; printf '%s' "${answer#!}" > "$out"; echo "curl: (22) The requested URL returned error: 404" >&2; exit 22 ;;
+  "~"*)
+    set -f; set -- ${answer#"~"}
+    respond "$1" "$2"
+    code=$1; shift 2
+    printf '%s' "$*" > "$out"
+    echo "curl: (22) The requested URL returned error: $code" >&2
+    exit 22 ;;
 esac
+respond 200 -
 printf '%s' "$answer" > "$out"

@@ -425,3 +425,42 @@ fn a_failed_job_exits_4_and_is_deleted() {
     let log = std::fs::read_to_string(run.join("fake-curl.log")).unwrap();
     assert!(log.ends_with("DELETE http://ok.test/v1/jobs/j1\n"), "{log}");
 }
+
+#[test]
+fn a_failed_poll_does_not_end_the_wait_but_failing_ones_do() {
+    let dir = TempDir::new();
+    let root = repo(&dir, "pass");
+    let run = script(
+        &root,
+        "x\n~502 -\n{\"state\":\"running\"}\n{\"state\":\"done\",\"response\":{\"answered\":true}}\n",
+    );
+    let out = served("check", &root, &[]);
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(
+        out.stderr.contains(
+            "waiting: no answer from the server, try 1 of 5 in 0 s\nwaiting: no answer from the server, try 2 of 5 in 0 s\nrunning…\n"
+        ),
+        "{}",
+        out.stderr
+    );
+    let log = std::fs::read_to_string(run.join("fake-curl.log")).unwrap();
+    assert!(log.ends_with("DELETE http://ok.test/v1/jobs/j1\n"), "{log}");
+    let lost = repo(&dir, "fail");
+    let gone = script(&lost, "x\n");
+    let given_up = served("check", &lost, &[]);
+    assert_eq!(given_up.code, 4, "{}", given_up.stderr);
+    assert!(
+        given_up.stderr.contains(
+            "error: gave up waiting for the job after 5 retries (the backend at http://ok.test/v1/jobs/j1 did not answer: "
+        ) && given_up
+            .stderr
+            .contains("curl: (7) Failed to connect); run the command again\n"),
+        "{}",
+        given_up.stderr
+    );
+    let calls = std::fs::read_to_string(gone.join("fake-curl.log")).unwrap();
+    assert!(
+        calls.ends_with("DELETE http://ok.test/v1/jobs/j1\n"),
+        "deleted: {calls}"
+    );
+}

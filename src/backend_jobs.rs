@@ -5,7 +5,12 @@
 //! to poll; the job is polled every 2 seconds, backing off to 5, while
 //! one updating line on stderr says how many projects are ahead; the
 //! answer is written to the response file, and the job is then deleted on
-//! the server. A small watcher process deletes the job too when
+//! the server. A poll that gets no answer, a `429` or a `5xx` is tried
+//! again, up to [`RETRIES`] times in a row with a doubling wait that
+//! honours `Retry-After` (at most [`LONGEST`] each, so the job does not
+//! expire on the server meanwhile); then the wait gives up and says so.
+//! The server's `503 queue-full` and `429 per-ip` are told in a plain
+//! sentence. A small watcher process deletes the job too when
 //! `sloptopop` is stopped (Ctrl-C) while it waits. Nothing else is ever
 //! sent: no telemetry, no update check, a generic user agent (decision
 //! D-0179).
@@ -34,15 +39,111 @@ pub(crate) fn endpoint(backend: &str) -> String {
     format!("{}/v1/jobs", backend.trim_end_matches('/'))
 }
 
+/// A call or poll that did not get what it asked for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Failed {
+    /// Whether trying again may help: no answer at all, a `429` or a `5xx`.
+    transient: bool,
+    /// The seconds the server asked to wait first (`Retry-After`).
+    retry_after: Option<u64>,
+    /// Why, for the user.
+    why: String,
+}
+
+impl Failed {
+    /// A failure that trying again does not mend.
+    const fn lasting(why: String) -> Self {
+        Self {
+            transient: false,
+            retry_after: None,
+            why,
+        }
+    }
+}
+
+/// The status and the `Retry-After` seconds of the last response in
+/// curl's header dump `text` (an interim `100 Continue` comes first).
+fn answered(text: &str) -> (Option<u16>, Option<u64>) {
+    let mut status = None;
+    let mut retry_after = None;
+    for line in text.lines() {
+        if let Some(rest) = line.strip_prefix("HTTP/") {
+            status = rest
+                .split_whitespace()
+                .nth(1)
+                .and_then(|code| code.parse().ok());
+        } else if let Some((name, value)) = line.split_once(':')
+            && name.trim().eq_ignore_ascii_case("retry-after")
+        {
+            retry_after = value.trim().parse().ok();
+        }
+    }
+    (status, retry_after)
+}
+
+/// The server's error document.
+#[derive(Deserialize)]
+struct Refusal {
+    /// The error.
+    error: Failure,
+}
+
+/// The first number in `text`.
+fn first_number(text: &str) -> Option<u64> {
+    text.split(|c: char| !c.is_ascii_digit())
+        .find(|digits| !digits.is_empty())
+        .and_then(|digits| digits.parse().ok())
+}
+
+/// What to tell the user about an unsuccessful call to `url`: a plain
+/// sentence for a full queue and for too many jobs or requests from one
+/// address, otherwise curl's error and the server's answer `body`.
+fn explain(
+    url: &str,
+    status: Option<u16>,
+    retry_after: Option<u64>,
+    body: &str,
+    curl: &str,
+) -> String {
+    let again = retry_after.map_or_else(|| "later".to_owned(), |secs| format!("in {secs} s"));
+    let refusal = serde_json::from_str::<Refusal>(body)
+        .ok()
+        .map(|answer| answer.error);
+    match (status, refusal) {
+        (Some(503), Some(error)) if error.code == "queue-full" => first_number(&error.message)
+            .map_or_else(
+                || format!("the server is busy: its queue is full, try again {again}"),
+                |jobs| format!("the server is busy: {jobs} jobs queued, try again {again}"),
+            ),
+        (Some(429), Some(error)) if error.code == "per-ip" => format!(
+            "too many checks from this address at once: try again {again}, or once one of them has ended"
+        ),
+        (Some(429), None) if body.trim().is_empty() => {
+            format!("too many requests from this address: try again {again}")
+        }
+        _ => {
+            let answer = if body.trim().is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", body.trim())
+            };
+            format!("the backend at {url} did not answer: {curl}{answer}")
+        }
+    }
+}
+
 /// Runs `curl` with the options every call shares and `args`, writing the
-/// answer to `output` (an earlier answer there is removed first).
+/// answer to `output` and its headers next to it (earlier ones there are
+/// removed first).
 ///
 /// # Errors
 ///
 /// Why it failed: curl could not run, could not connect, or the server
-/// answered with an error (whose body is quoted).
-fn call(curl: &Path, url: &str, args: &[&str], output: &Path) -> Result<(), String> {
+/// answered with an error (told in a sentence, or its body quoted).
+fn call(curl: &Path, url: &str, args: &[&str], output: &Path) -> Result<(), Failed> {
+    let headers = output.with_extension("headers");
     let _stale = fs::remove_file(output);
+    let _stale_headers = fs::remove_file(&headers);
     let ran = Command::new(curl)
         .args([
             "--silent",
@@ -54,25 +155,30 @@ fn call(curl: &Path, url: &str, args: &[&str], output: &Path) -> Result<(), Stri
             USER_AGENT,
         ])
         .args(args)
+        .arg("--dump-header")
+        .arg(&headers)
         .arg("--output")
         .arg(output)
         .arg(url)
         .stdin(Stdio::null())
         .output()
-        .map_err(|error| format!("cannot run {}: {error}", curl.display()))?;
+        .map_err(|error| Failed::lasting(format!("cannot run {}: {error}", curl.display())))?;
     if ran.status.success() {
         return Ok(());
     }
+    let (status, retry_after) = answered(&fs::read_to_string(&headers).unwrap_or_default());
     let body = fs::read_to_string(output).unwrap_or_default();
-    let answer = if body.trim().is_empty() {
-        String::new()
-    } else {
-        format!(" ({})", body.trim())
-    };
-    Err(format!(
-        "the backend at {url} did not answer: {}{answer}",
-        String::from_utf8_lossy(&ran.stderr).trim()
-    ))
+    Err(Failed {
+        transient: status.is_none_or(|code| code == 429 || code >= 500),
+        retry_after,
+        why: explain(
+            url,
+            status,
+            retry_after,
+            &body,
+            String::from_utf8_lossy(&ran.stderr).trim(),
+        ),
+    })
 }
 
 /// The server's answer to a submitted job.
@@ -107,7 +213,8 @@ pub(crate) fn submit(
             &data,
         ],
         answer,
-    )?;
+    )
+    .map_err(|failed| failed.why)?;
     let text = fs::read_to_string(answer).unwrap_or_default();
     serde_json::from_str::<Submitted>(&text)
         .map(|job| format!("{}{}", backend.trim_end_matches('/'), job.status_url))
@@ -164,11 +271,14 @@ enum State {
 /// # Errors
 ///
 /// As [`call`]; a failed job's error; an answer that is not a state.
-fn poll(curl: &Path, url: &str, answer: &Path, response: &Path) -> Result<State, String> {
+fn poll(curl: &Path, url: &str, answer: &Path, response: &Path) -> Result<State, Failed> {
     call(curl, url, &[], answer)?;
     let text = fs::read_to_string(answer).unwrap_or_default();
-    let polled: Polled<'_> = serde_json::from_str(&text)
-        .map_err(|error| format!("the backend at {url} answered no job state: {error}"))?;
+    let polled: Polled<'_> = serde_json::from_str(&text).map_err(|error| {
+        Failed::lasting(format!(
+            "the backend at {url} answered no job state: {error}"
+        ))
+    })?;
     match (polled.state, polled.response, polled.error) {
         ("queued", _, _) => Ok(State::Queued {
             ahead: polled.position,
@@ -177,14 +287,16 @@ fn poll(curl: &Path, url: &str, answer: &Path, response: &Path) -> Result<State,
         ("running", _, _) => Ok(State::Running),
         ("done", Some(document), _) => fs::write(response, document.get())
             .map(|()| State::Done)
-            .map_err(|error| format!("cannot write {}: {error}", response.display())),
-        ("failed", _, Some(failure)) => Err(format!(
+            .map_err(|error| {
+                Failed::lasting(format!("cannot write {}: {error}", response.display()))
+            }),
+        ("failed", _, Some(failure)) => Err(Failed::lasting(format!(
             "the server refused the request: {}: {}",
             failure.code, failure.message
-        )),
-        (other, _, _) => Err(format!(
+        ))),
+        (other, _, _) => Err(Failed::lasting(format!(
             "the backend at {url} answered an unknown job state `{other}`"
-        )),
+        ))),
     }
 }
 
@@ -241,32 +353,78 @@ impl<'a> Progress<'a> {
     }
 }
 
-/// Polls the job at `url` until it is done or failed, waiting `poll`
-/// first and then half of it more each time up to two and a half times
-/// it (2, 3, 4, 5, 5… seconds for 2), showing where it is on `progress`;
-/// `files` are the answer and the response files.
+/// How many polls in a row may fail before the wait gives up.
+const RETRIES: u32 = 5;
+
+/// The longest wait before a poll is tried again, also when the server
+/// asks for more: five of them stay well inside the 2 minutes after which
+/// the server drops a queued job nobody polls.
+const LONGEST: Duration = Duration::from_secs(20);
+
+/// Polls the job at `url` until it is done or failed, waiting `poll_every`
+/// first and then half of it more each time up to two and a half times it
+/// (2, 3, 4, 5, 5… seconds for 2), with `pause`, showing where it is on
+/// `progress`; `files` are the answer and the response files. A poll that
+/// fails for a reason that may pass is tried again after [`backoff`], up
+/// to [`RETRIES`] times in a row.
 ///
 /// # Errors
 ///
-/// As [`poll`].
+/// As [`poll`]; when the polls kept failing, why the last one did.
 pub(crate) fn wait(
     curl: &Path,
     url: &str,
     files: (&Path, &Path),
     poll_every: Duration,
     progress: &mut Progress<'_>,
+    pause: &mut dyn FnMut(Duration),
 ) -> Result<(), String> {
     let mut delay = poll_every;
+    let mut failures = 0;
     loop {
-        let state = poll(curl, url, files.0, files.1).inspect_err(|_| progress.end())?;
-        progress.show(line(&state));
-        if state == State::Done {
+        let failed = match poll(curl, url, files.0, files.1) {
+            Ok(state) => {
+                progress.show(line(&state));
+                if state == State::Done {
+                    progress.end();
+                    return Ok(());
+                }
+                failures = 0;
+                pause(delay);
+                delay = next(delay, poll_every);
+                continue;
+            }
+            Err(failed) => failed,
+        };
+        if !failed.transient {
             progress.end();
-            return Ok(());
+            return Err(failed.why);
         }
-        pause(delay);
-        delay = next(delay, poll_every);
+        if failures == RETRIES {
+            progress.end();
+            return Err(format!(
+                "gave up waiting for the job after {RETRIES} retries ({}); run the command again",
+                failed.why
+            ));
+        }
+        failures += 1;
+        let again = backoff(failures, poll_every, failed.retry_after);
+        progress.show(format!(
+            "waiting: no answer from the server, try {failures} of {RETRIES} in {} s",
+            again.as_secs()
+        ));
+        pause(again);
     }
+}
+
+/// The wait before try `failures` (from 1) of a failed poll: `every`,
+/// doubled for each failure before it, or the server's `retry_after` if
+/// longer; at most [`LONGEST`].
+fn backoff(failures: u32, every: Duration, retry_after: Option<u64>) -> Duration {
+    every
+        .saturating_mul(2_u32.saturating_pow(failures.saturating_sub(1)))
+        .max(Duration::from_secs(retry_after.unwrap_or(0)))
+        .min(LONGEST)
 }
 
 /// Waits `delay` between two polls.
@@ -274,7 +432,7 @@ pub(crate) fn wait(
     clippy::disallowed_methods,
     reason = "the CLI is synchronous and has no async runtime: a poll of the server's queue waits on the thread between two curl calls"
 )]
-fn pause(delay: Duration) {
+pub(crate) fn pause(delay: Duration) {
     thread::sleep(delay);
 }
 

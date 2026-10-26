@@ -36,7 +36,7 @@ with `-`.
 | 1 | For `check`: the repository did not pass. For `transform`: a step is waiting for a confirmation, was refused, or is blocked by one that was. For `collect`: it could not write the reports directory, the rule pack, `.collect.json` or its output. For `serve`: the session ended without `shutdown`, or a framing error. |
 | 2 | Usage error: an unknown command or option, a missing value, an unknown format or tool, a root or rules directory that does not exist. The message and the usage text go to stderr. |
 | 3 | `collect`: no container runtime answered (nothing ran). `check`, `fix`, `transform` and `local`: `sloptopop-local` is missing, could not be started, failed, or printed something that is not JSON. This includes it refusing: not the top of a git repository, uncommitted or untracked changes, no usable gitleaks report (run `collect`), `HEAD` moved since the request, a branch that exists, a confirmation that is not allowed. |
-| 4 | `check`, `fix`, `transform`: the upload was not confirmed, `curl` is not on `PATH`, no server answered or it refused the request (the message names the hosted service and the self-hosted option; `queue-full` and `429` are in [troubleshooting.md](troubleshooting.md#server-and-queue-problems-exit-code-4)), or the server's job failed. |
+| 4 | `check`, `fix`, `transform`: the upload was not confirmed, `curl` is not on `PATH`, no server answered or it refused the request (the message names the hosted service and the self-hosted option; a busy server and `429` are in [troubleshooting.md](troubleshooting.md#server-and-queue-problems-exit-code-4)), the server's job failed, or the server stopped answering while the job waited (after 5 retries). |
 | 130 | `check`, `fix`, `transform`: stopped with Ctrl-C (`SIGINT`) while waiting; the job was deleted on the server. |
 
 ## `check`
@@ -235,7 +235,13 @@ or `--apply`) stops at the first such step and lists what to confirm:
    queues it: the server runs a few projects at a time, first come, first
    served.
 2. `GET <backend>/v1/jobs/<id>`, every 2 seconds at first, backing off to
-   every 5. While the job waits, one line on stderr says where it is:
+   every 5. A poll that gets no answer, a `429` or a `5xx` does not end the
+   wait: it is tried again up to 5 times in a row, after 2, 4, 8, 16 and 20
+   seconds (or the server's `Retry-After`, up to 20 seconds, so the job
+   does not expire meanwhile), with a line saying so; after that,
+   `sloptopop` gives up with `error: gave up waiting for the job after 5
+   retries (…); run the command again` and exit code 4. While the job
+   waits, one line on stderr says where it is:
 
    ```text
    waiting: 3 projects ahead of you
@@ -258,8 +264,9 @@ Ctrl-C while waiting deletes the job on the server (a small watcher
 process sends the `DELETE` once `sloptopop` stops) and exits 130. A job
 nobody polls for 2 minutes expires on the server, and an answer not
 fetched within 10 minutes is dropped: the server keeps nothing. A full
-queue (`503 queue-full`) or too many jobs from your address (`429`) are
-refused at step 1: see
+queue (`503 queue-full`: `the server is busy: N jobs queued, try again in
+M s`) or too many jobs from your address (`429 per-ip`: `too many checks
+from this address at once`) are refused at step 1: see
 [troubleshooting.md](troubleshooting.md#server-and-queue-problems-exit-code-4).
 
 ## Waiting for confirmation
