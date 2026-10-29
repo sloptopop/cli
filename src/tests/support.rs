@@ -4,6 +4,7 @@
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde_json::{Value, json};
@@ -104,4 +105,44 @@ pub(crate) fn fake_versions(root: &Path) {
         })
         .collect();
     fs::write(root.join(".fake-versions"), lines).unwrap();
+}
+
+/// Runs `git` in `root` as a synthetic author; its trimmed output.
+pub(crate) fn git(root: &Path, args: &[&str]) -> String {
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args([
+            "-c",
+            "user.name=Tester",
+            "-c",
+            "user.email=tester",
+            "-c",
+            "commit.gpgsign=false",
+        ])
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "git {args:?}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8(out.stdout).unwrap().trim().to_owned()
+}
+
+/// Writes `text` to `path` in `root` and commits everything with `message`.
+pub(crate) fn commit(root: &Path, path: &str, text: &str, message: &str) {
+    fs::write(root.join(path), text).unwrap();
+    git(root, &["add", "-A"]);
+    git(root, &["commit", "-q", "-m", message]);
+}
+
+/// A repository on `main` with one commit, now on branch `feature`.
+pub(crate) fn repository(dir: &TempDir) -> &Path {
+    let root = dir.0.as_path();
+    git(root, &["init", "-q", "-b", "main"]);
+    commit(root, "a.test.ts", "expect(a).toBe(2)\n", "base");
+    git(root, &["checkout", "-q", "-b", "feature"]);
+    root
 }

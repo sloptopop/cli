@@ -28,9 +28,10 @@
 //!
 //! 0. `args`, `collect_convert`, `collect_detect`, `collect_gitignore`,
 //!    `collect_lookup`, `collect_pack`, `diagnostic`, `engine_locate`,
-//!    `framing`, `handshake`, `json_fields`, `jsonrpc`, `backend_jobs`
-//!    (no crate imports)
+//!    `framing`, `handshake`, `history_git`, `history_mask`, `json_fields`,
+//!    `jsonrpc`, `backend_jobs` (no crate imports)
 //! 1. `collect_catalogue`, `collect_runtime`, `engine_run`,
+//!    `history_upload` (the commit range in the upload),
 //!    `render_manifest`, `render_report`, `schema`, `session`
 //! 2. `collect_container`, `collect_data`, `collect_image`, `collect_plan`,
 //!    `command_io`, `server`
@@ -72,6 +73,9 @@ mod engine_run;
 mod fix_command;
 pub mod framing;
 mod handshake;
+mod history_git;
+mod history_mask;
+mod history_upload;
 mod json_fields;
 mod jsonrpc;
 mod local_command;

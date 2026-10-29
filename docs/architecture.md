@@ -33,14 +33,17 @@ Every component is deterministic: the same input produces the same output.
 ## `check`, `fix` and `transform`
 
 ```
-sloptopop check [path] [--format text|json] [--backend <url>] [--yes]
-sloptopop fix [path] [--apply] [--backend <url>] [--yes]
-sloptopop transform [root] [--apply] [--branch <name>] [--backend <url>] [--yes] …
+sloptopop check [path] [--format text|json] [--backend <url>] [--yes] [--no-history]
+sloptopop fix [path] [--apply] [--backend <url>] [--yes] [--no-history]
+sloptopop transform [root] [--apply] [--branch <name>] [--backend <url>] [--yes] [--no-history] …
 ```
 
 All three go the same way: `sloptopop-local request <root> --mode <mode>`
 writes the request (refusing without a clean tree or a usable gitleaks
-report), the CLI shows the upload manifest, asks, and submits the request
+report), the CLI adds the branch's masked commit range read with `git`
+(`history_git`, `history_mask`, `history_upload`; not with `--no-history`,
+see [commands.md](commands.md#the-commit-range)), shows the upload
+manifest, asks, and submits the request
 to the server's job queue with `curl`, polls it while it waits and fetches
 the answer (the only network calls, made by this open code);
 then `sloptopop-local report` prints the server's

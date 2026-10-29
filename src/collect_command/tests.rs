@@ -123,7 +123,13 @@ fn tools_run_from_their_verified_images() {
     let repo = Repo::new(&["pyproject.toml"]);
     let ran = repo.run("docker");
     assert_eq!(ran.code, Ok(0), "{}", ran.stderr);
-    assert_eq!(ran.stderr, "");
+    assert!(
+        ran.stderr
+            .lines()
+            .all(|line| line.starts_with("warning: the db-osv-") && line.contains(" days old (")),
+        "nothing but the clock's staleness warning: {}",
+        ran.stderr
+    );
     assert!(
         ran.stdout.starts_with("fetch    gitleaks "),
         "{}",
@@ -501,6 +507,16 @@ fn snapshots_turn_stale_after_a_week() {
     );
     assert_eq!(warned("latest"), "", "not a date");
     assert!(today() >= 20_747, "the clock is past 2026-10-21");
+    let days = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        / 86_400;
+    let days = i64::try_from(days).unwrap();
+    assert!(
+        (days..=days + 1).contains(&today()),
+        "today is the day count since 1970"
+    );
 }
 
 #[test]

@@ -127,7 +127,7 @@ overwrites or edits an existing one. Without `--apply` it writes nothing.
 
 | Command | What it sends to sloptopop |
 |---|---|
-| `check`, `fix` | One request to the server you name (hosted by default): the text files of the commit `HEAD` points to with every secret value masked, the analyzer reports in `.sloptopop/reports/`, and `.sloptopop/context.json` if you have one. The Report (`check`) or the fixes (`fix`) come back. |
+| `check`, `fix` | One request to the server you name (hosted by default): the text files of the commit `HEAD` points to with every secret value masked, the analyzer reports in `.sloptopop/reports/`, `.sloptopop/context.json` if you have one, and the branch's commit range since the merge base with the default branch (masked lines; `--no-history` leaves it out). The Report (`check`) or the fixes (`fix`) come back. |
 | `collect` | Nothing about your code. It fetches the analyzer images and the daily vulnerability snapshots from sloptopop's component library (or your mirror), each announced before it is fetched; no analyzer has network. For Go and .NET projects, a prepare step downloads your project's own dependencies from your module or package registries. See [collect.md](collect.md#how-a-tool-runs). |
 | `transform` (preview) | The same request: the server detects, plans and verifies; the Report, the plan and the verified changes come back. |
 
@@ -146,8 +146,13 @@ What `transform` uploads, exactly:
   A documented public prefix (`sk_live_`, `ghp_`, `AKIA`, …) is kept, so
   the provider is still known. The real value is put back on your
   machine in the commits;
-- never: your git history, other branches, your confirmations
-  (`attestations.json`) or who made them.
+- the commit range, unless `--no-history`: your branch's commits since
+  the merge base with the default branch (at most 200), each with its id,
+  the coding agents its trailers name, its changed paths and, for files
+  of the snapshot, its removed and added lines, every line masked by its
+  shape ([commands.md](commands.md#the-commit-range));
+- never: other branches, older history, author names or e-mail
+  addresses, your confirmations (`attestations.json`) or who made them.
 
 Before anything is sent, `transform` prints this manifest (files, bytes,
 what is left out and why, how many values are masked, the destination)

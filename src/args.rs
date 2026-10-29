@@ -11,10 +11,10 @@ pub(crate) const USAGE: &str = "\
 Usage: sloptopop <command>
 
 Commands:
-  check [path] [--format text|json] [--backend <url>] [--yes]
+  check [path] [--format text|json] [--backend <url>] [--yes] [--no-history]
                   Check a repository (default: the current directory) with
                   the sloptopop server; exit 0 if it passes, 1 if not
-  fix [path] [--apply] [--backend <url>] [--yes]
+  fix [path] [--apply] [--backend <url>] [--yes] [--no-history]
                   Show the files the server's mechanical fixes would
                   create; --apply commits them on a new branch (existing
                   files are never touched)
@@ -28,7 +28,7 @@ Commands:
                   anything; --host-tools runs unpinned tools from PATH
                   instead (unsupported). Exit code 3: no container runtime
   transform [root] [--apply] [--branch <name>] [--backend <url>] [--yes]
-            [--confirm <id,...> --by <name>] [--format text|json]
+            [--no-history] [--confirm <id,...> --by <name>] [--format text|json]
                   Plan verified transformations with the sloptopop server
                   and apply them on a new branch (preview; see
                   docs/commands.md#transform-preview); without --apply a
@@ -50,8 +50,10 @@ service (the default) or your self-hosted one (--backend <url>). check,
 fix and transform prepare the upload with sloptopop-local (open source),
 found via the SLOPTOPOP_LOCAL environment variable, next to this
 executable, or on PATH; it masks every secret value gitleaks reports, so
-run `sloptopop collect` first. They show what they upload and ask first
-(--yes in CI), then send one request with curl. Exit code 3 means
+run `sloptopop collect` first. They add the branch's commits since the
+merge base with the default branch (at most 200, lines masked; not with
+--no-history). They show what they upload and ask first (--yes in CI),
+then send one request with curl. Exit code 3 means
 sloptopop-local is missing or failed; 4 means the upload was not confirmed
 or the server could not be reached or refused it.
 ";
@@ -114,6 +116,8 @@ pub(crate) struct CheckOptions {
     pub(crate) backend: Option<String>,
     /// Upload without asking.
     pub(crate) yes: bool,
+    /// Add the commit range to the upload (`--no-history` turns it off).
+    pub(crate) history: bool,
 }
 
 /// The options of `fix`.
@@ -127,6 +131,8 @@ pub(crate) struct FixOptions {
     pub(crate) backend: Option<String>,
     /// Upload without asking.
     pub(crate) yes: bool,
+    /// Add the commit range to the upload (`--no-history` turns it off).
+    pub(crate) history: bool,
 }
 
 /// The options of `transform`.
@@ -142,6 +148,8 @@ pub(crate) struct TransformOptions {
     pub(crate) backend: Option<String>,
     /// Upload without asking.
     pub(crate) yes: bool,
+    /// Add the commit range to the upload (`--no-history` turns it off).
+    pub(crate) history: bool,
     /// Attestations to confirm.
     pub(crate) confirm: Vec<String>,
     /// Who confirms them.
@@ -207,12 +215,14 @@ fn parse_check(rest: &[&str]) -> Result<Command, String> {
         format: Format::Text,
         backend: None,
         yes: false,
+        history: true,
     };
     let mut root = None;
     let mut rest = rest.iter();
     while let Some(&arg) = rest.next() {
         match arg {
             "--yes" => options.yes = true,
+            "--no-history" => options.history = false,
             "--backend" => options.backend = Some(value(arg, rest.next())?.to_owned()),
             "--format" => options.format = format(value(arg, rest.next())?)?,
             path if root.is_none() => root = Some(checked_path(path)?),
@@ -229,6 +239,7 @@ fn parse_fix(rest: &[&str]) -> Result<Command, String> {
         apply: false,
         backend: None,
         yes: false,
+        history: true,
     };
     let mut root = None;
     let mut rest = rest.iter();
@@ -236,6 +247,7 @@ fn parse_fix(rest: &[&str]) -> Result<Command, String> {
         match arg {
             "--apply" => options.apply = true,
             "--yes" => options.yes = true,
+            "--no-history" => options.history = false,
             "--backend" => options.backend = Some(value(arg, rest.next())?.to_owned()),
             path if root.is_none() => root = Some(checked_path(path)?),
             _ => return Err(format!("unrecognised arguments: fix {arg}")),
@@ -340,6 +352,7 @@ fn parse_transform(rest: &[&str]) -> Result<Command, String> {
         branch: None,
         backend: None,
         yes: false,
+        history: true,
         confirm: Vec::new(),
         by: None,
         format: Format::Text,
@@ -350,6 +363,7 @@ fn parse_transform(rest: &[&str]) -> Result<Command, String> {
         match arg {
             "--apply" => options.apply = true,
             "--yes" => options.yes = true,
+            "--no-history" => options.history = false,
             "--branch" => options.branch = Some(value(arg, rest.next())?.to_owned()),
             "--backend" => options.backend = Some(value(arg, rest.next())?.to_owned()),
             "--by" => options.by = Some(value(arg, rest.next())?.to_owned()),

@@ -5,8 +5,10 @@
 //! 1. `sloptopop-local request <root> --mode <mode>` checks the
 //!    repository, masks every secret value the secret scanner reported and
 //!    writes the request and its manifest;
-//! 2. this module shows the manifest and asks before anything is sent
-//!    (`--yes` skips the question, for CI);
+//! 2. unless `--no-history` is given, this module adds the snapshot's
+//!    masked commit range to the request (`history_upload`, D-0915);
+//!    it shows the manifest, with the range, and asks before anything is
+//!    sent (`--yes` skips the question, for CI);
 //! 3. it submits the request to the server's job queue with `curl` (the
 //!    only network calls sloptopop makes, and the only code that makes them
 //!    is this open code), shows its place in line on stderr until the job
@@ -31,6 +33,7 @@ use crate::command_io::parse_document;
 use crate::diagnostic::report;
 use crate::engine_locate::Locator;
 use crate::engine_run::invoke;
+use crate::history_upload::{attach, line};
 use crate::json_fields::text;
 use crate::render_manifest::manifest;
 
@@ -51,6 +54,8 @@ pub(crate) struct Asked<'a> {
     pub(crate) backend: Option<&'a str>,
     /// Upload without asking.
     pub(crate) yes: bool,
+    /// Add the commit range.
+    pub(crate) history: bool,
 }
 
 /// The run the server answered: its id and the response's path.
@@ -99,8 +104,13 @@ pub(crate) fn exchange(
     let root = Path::new(asked.root);
     let request = root.join(text(&document, "request"));
     let response = root.join(text(&document, "response"));
-    let _shown = stderr
-        .write_all(manifest(document.get("manifest").unwrap_or(&Value::Null), &url).as_bytes());
+    let attached = asked
+        .history
+        .then(|| attach(locator.path.as_deref(), root, &request))
+        .flatten();
+    let shown = manifest(document.get("manifest").unwrap_or(&Value::Null), &url)
+        + &attached.as_ref().map(line).unwrap_or_default();
+    let _shown = stderr.write_all(shown.as_bytes());
     if !asked.yes && !confirmed(stdin, stderr) {
         return Err(report(
             stderr,

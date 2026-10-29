@@ -160,8 +160,9 @@ mirror or proxy, set `SLOPTOPOP_REGISTRY`. See
 telemetry. Only `check`, `fix` and `transform` go online, and only to the
 sloptopop server (the hosted one or your `--backend`), with `curl`:
 
-- one `POST /v1/jobs` with the request you confirmed (the files and
-  reports the manifest lists);
+- one `POST /v1/jobs` with the request you confirmed (the files, the
+  reports and the commit range the manifest lists; `--no-history` leaves
+  the range out, see [commands.md](commands.md#the-commit-range));
 - then `GET /v1/jobs/<id>` for the job's state, every 2 seconds at first,
   backing off to every 5, until the answer is there; a poll that fails is
   tried again up to 5 times, waiting 2 to 20 seconds;

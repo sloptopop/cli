@@ -8,6 +8,7 @@ fn check(root: &str, format: Format, backend: Option<&str>, yes: bool) -> Comman
         format,
         backend: backend.map(str::to_owned),
         yes,
+        history: true,
     })
 }
 
@@ -17,7 +18,21 @@ fn fix(root: &str, apply: bool, backend: Option<&str>, yes: bool) -> Command {
         apply,
         backend: backend.map(str::to_owned),
         yes,
+        history: true,
     })
+}
+
+#[test]
+fn no_history_leaves_the_commit_range_out() {
+    let parsed = |args: &[&str]| parse(&args.iter().map(OsString::from).collect::<Vec<_>>());
+    let Ok(Command::Check(checked)) = parsed(&["check", "--no-history"]) else {
+        panic!("check");
+    };
+    assert!(!checked.history, "check");
+    let Ok(Command::Fix(fixed)) = parsed(&["fix", "--no-history"]) else {
+        panic!("fix");
+    };
+    assert!(!fixed.history, "fix");
 }
 
 #[test]
@@ -278,6 +293,7 @@ fn transform_arguments_are_parsed() {
             branch: None,
             backend: None,
             yes: false,
+            history: true,
             confirm: Vec::new(),
             by: None,
             format: Format::Text,
@@ -293,6 +309,7 @@ fn transform_arguments_are_parsed() {
         "--backend",
         "http://192.0.2.10:8080",
         "--yes",
+        "--no-history",
         "--confirm",
         "att-1,,att-2",
         "--confirm",
@@ -312,6 +329,7 @@ fn transform_arguments_are_parsed() {
             branch: Some("fixes".to_owned()),
             backend: Some("http://192.0.2.10:8080".to_owned()),
             yes: true,
+            history: false,
             confirm: vec!["att-1".to_owned(), "att-2".to_owned(), "att-3".to_owned()],
             by: Some("lead".to_owned()),
             format: Format::Json,

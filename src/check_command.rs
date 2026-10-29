@@ -30,6 +30,7 @@ pub(crate) fn check(
         mode: "check",
         backend: options.backend.as_deref(),
         yes: options.yes,
+        history: options.history,
     };
     let answered = match exchange(locator, asked, stdin, stderr) {
         Ok(answered) => answered,

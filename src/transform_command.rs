@@ -39,6 +39,7 @@ pub(crate) fn transform(
         mode: "transform",
         backend: options.backend.as_deref(),
         yes: options.yes,
+        history: options.history,
     };
     let answered = match exchange(locator, asked, stdin, stderr) {
         Ok(answered) => answered,

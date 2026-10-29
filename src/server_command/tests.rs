@@ -5,7 +5,7 @@ use std::ffi::OsString;
 use std::fs;
 
 use super::*;
-use crate::tests::support::{FAKE_LOCAL, TempDir, fake_local};
+use crate::tests::support::{CURL_DIR, FAKE_LOCAL, TempDir, commit, fake_local, repository};
 
 /// A repository directory `name` in `dir`.
 fn repo(dir: &TempDir, name: &str) -> String {
@@ -29,6 +29,7 @@ fn run(
         mode: "transform",
         backend: Some(backend),
         yes,
+        history: true,
     };
     let result = exchange(locator, asked, &mut &stdin[..], &mut stderr);
     (result, String::from_utf8_lossy(&stderr).into_owned())
@@ -111,6 +112,7 @@ fn nothing_goes_without_a_yes_curl_or_a_server() {
             mode: "check",
             backend: None,
             yes: true,
+            history: true,
         },
         &mut &b""[..],
         &mut sink,
@@ -124,4 +126,47 @@ fn nothing_goes_without_a_yes_curl_or_a_server() {
         String::from_utf8_lossy(&sink).contains("https://api.sloptopop.dev/v1/jobs"),
         "the default server"
     );
+}
+
+#[test]
+fn the_commit_range_goes_unless_left_out() {
+    let dir = TempDir::new();
+    let root = repository(&dir);
+    commit(root, "b.ts", "export const b = 1;\n", "Add b");
+    let mut path = OsString::from(CURL_DIR);
+    path.push(":");
+    path.push(std::env::var_os("PATH").unwrap_or_default());
+    let locator = Locator {
+        path: Some(path),
+        ..fake_local()
+    };
+    let root = root.to_string_lossy().into_owned();
+    let posted = format!("{root}/.sloptopop/transform/0123456789abcdef/request.json.posted");
+    for (history, sent) in [(true, true), (false, false)] {
+        let mut stderr = Vec::new();
+        let asked = Asked {
+            root: &root,
+            mode: "check",
+            backend: Some("http://ok.test"),
+            yes: true,
+            history,
+        };
+        assert!(
+            exchange(&locator, asked, &mut &b""[..], &mut stderr).is_ok(),
+            "{history}"
+        );
+        let told = String::from_utf8_lossy(&stderr);
+        assert_eq!(
+            told.contains("  commit range: 1 commit(s) since the merge base with main, "),
+            sent,
+            "{told}"
+        );
+        assert_eq!(
+            fs::read_to_string(&posted)
+                .unwrap()
+                .contains("\"history\":{"),
+            sent,
+            "posted"
+        );
+    }
 }

@@ -13,11 +13,11 @@ secrets), then each command prepares the masked snapshot with
 applies the server's answer.
 
 ```
-sloptopop check [path] [--format text|json] [--backend <url>] [--yes]
-sloptopop fix [path] [--apply] [--backend <url>] [--yes]
+sloptopop check [path] [--format text|json] [--backend <url>] [--yes] [--no-history]
+sloptopop fix [path] [--apply] [--backend <url>] [--yes] [--no-history]
 sloptopop collect [root] [--only <tool,...>] [--rules <dir>] [--dry-run] [--offline] …
 sloptopop transform [root] [--apply] [--branch <name>] [--backend <url>] [--yes]
-                    [--confirm <id,...> --by <name>] [--format text|json]   (preview)
+                    [--no-history] [--confirm <id,...> --by <name>] [--format text|json]   (preview)
 sloptopop local <arguments>
 sloptopop serve --stdio
 sloptopop schema
@@ -42,7 +42,7 @@ with `-`.
 ## `check`
 
 ```
-sloptopop check [path] [--format text|json] [--backend <url>] [--yes]
+sloptopop check [path] [--format text|json] [--backend <url>] [--yes] [--no-history]
 ```
 
 Checks the repository at `path` on the sloptopop server and prints the
@@ -53,7 +53,9 @@ server's [Report](report-format.md).
    value the gitleaks report in `.sloptopop/reports/` names (it refuses
    without a usable one: run `sloptopop collect`), and writes the request
    with the analyzer reports `collect` wrote.
-2. It shows what it will upload and asks (`--yes` skips the question), and
+2. It adds the branch's [commit range](#the-commit-range) to the request
+   (not with `--no-history`), shows what it will upload and asks (`--yes`
+   skips the question), and
    submits it to `<backend>/v1/jobs` with `curl`. The server queues it;
    while it waits, stderr shows how many projects are ahead (see
    [Waiting in the queue](#waiting-in-the-queue)).
@@ -69,6 +71,7 @@ It changes nothing in the repository.
 | `--format json` | The server's Report, unchanged. See [report-format.md](report-format.md). |
 | `--backend <url>` | The server (default the hosted `https://api.sloptopop.dev`); your self-hosted `sloptopop-engine` otherwise. |
 | `--yes` | Upload without asking. |
+| `--no-history` | Leave the [commit range](#the-commit-range) out of the upload. |
 
 Exit code: 0 if the repository passed, 1 if not, 3 if `sloptopop-local`
 failed, 4 if nothing was uploaded or no server answered. The profile is
@@ -78,7 +81,7 @@ failed, 4 if nothing was uploaded or no server answered. The profile is
 ## `fix`
 
 ```
-sloptopop fix [path] [--apply] [--backend <url>] [--yes]
+sloptopop fix [path] [--apply] [--backend <url>] [--yes] [--no-history]
 ```
 
 Creates missing files from templates: the mechanical fixes some findings
@@ -91,6 +94,7 @@ digests.
 - With `--apply` it commits each file as one commit on a new branch
   (`sloptopop/transform-<run>`); the checkout is never touched.
 - It never overwrites or edits a file that already exists.
+- `--backend`, `--yes` and `--no-history` work as for [`check`](#check).
 
 The templates today:
 
@@ -169,6 +173,7 @@ language is in [analyzers.md](analyzers.md).
 
 ```
 sloptopop transform [root] [--apply] [--branch <name>] [--backend <url>] [--yes]
+                    [--no-history]
                     [--confirm <id,...> --by <name>] [--format text|json]
 ```
 
@@ -185,9 +190,11 @@ What it does, in order:
    gitleaks report names (it refuses without a usable one), and writes the
    request, with the analyzer reports, to
    `.sloptopop/transform/<run>/request.json`.
-2. **Show and ask.** It prints what it will upload and where to stderr
+2. **Show and ask.** It adds the branch's
+   [commit range](#the-commit-range) to the request (not with
+   `--no-history`), prints what it will upload and where to stderr
    (the upload manifest: files, bytes, analyzer reports, files left out
-   and why, secret values masked) and asks `Upload? [y/N]`. `--yes`
+   and why, secret values masked, the commit range) and asks `Upload? [y/N]`. `--yes`
    uploads without asking (for CI). Without a yes, nothing is sent (exit
    code 4).
 3. **Upload.** It submits the request to `<backend>/v1/jobs` with
@@ -213,6 +220,7 @@ What it does, in order:
 | `--branch <name>` | The branch to create (default `sloptopop/transform-<run>`). It must not exist. |
 | `--backend <url>` | The server's base URL (default `https://api.sloptopop.dev`, not open yet). `http://` is accepted for a server inside your own network. |
 | `--yes` | Upload without asking. |
+| `--no-history` | Leave the [commit range](#the-commit-range) out of the upload. |
 | `--confirm <id,...>` | Confirm these declared behaviour changes (`att-1,att-2`, as `SUMMARY.md` lists them) before delivering. Repeatable. Needs `--by`. |
 | `--by <name>` | Who confirms. The name must be listed in `.sloptopop/context.json` (see below). |
 | `--format text\|json` | Print `SUMMARY.md` (default) or `report.json`. |
@@ -225,6 +233,62 @@ and it is not committed until a person confirms it. A first run (dry run
 or `--apply`) stops at the first such step and lists what to confirm:
 
 ```
+## The commit range
+
+`check`, `fix` and `transform` also send what your branch did since it
+left the default branch, so the server can see a weakened test, a
+removed or lowered check, a file moved but left behind, or a script
+nobody refers to (decision D-0915). It is on by default because these
+are the slips the server cannot see in one snapshot, it is shown in the
+manifest before anything is sent, and it holds no more than below.
+`--no-history` leaves it out.
+
+- **Which commits.** From the merge base of `HEAD` with the default
+  branch (`origin/HEAD`, else `origin/main`, `origin/master`, `main`,
+  `master`) to `HEAD`: the newest 200, oldest first. A larger range keeps
+  the newest that fit (the manifest says "the newest only"). No git, a
+  shallow clone, a detached `HEAD`, no default branch or no commit since
+  the merge base: no range, and the upload goes without one.
+- **Per commit.** Its id; the coding agents its trailers or its author
+  name name (`claude`, `copilot`, `cursor`, …: only that word, never a
+  name or an e-mail address); per changed file its path, how it changed
+  (`added`, `deleted`, `modified`, `renamed`, `copied`), the old path of a
+  rename or copy, and, only for files that are part of the uploaded
+  snapshot, the removed and added lines of each change, without context.
+- **Masked.** gitleaks' report covers only the files of `HEAD`, so every
+  line of the range is masked by its shape: on a line that names a
+  credential (`key`, `secret`, `token`, `password`, `auth`, …) or holds a
+  documented credential prefix, every quoted value of 8 or more
+  characters; on any line, every value of 16 or more characters that mixes
+  letters and digits; every line of a private-key block. Values become
+  `x`s of the same length; documented prefixes (`sk_live_`, `ghp_`, …) are
+  kept.
+- **Size.** At most 31 MiB, and the whole request stays under the
+  server's 64 MiB.
+
+The manifest shows it as one line:
+
+```
+  commit range: 3 commit(s) since the merge base with origin/main, 4120 bytes, lines masked (--no-history leaves it out)
+```
+
+It is the request's `history` member, and
+`.sloptopop/transform/<run>/request.json` keeps it as sent:
+
+```json
+{ "schemaVersion": 1, "base": "<merge base>", "truncated": false,
+  "commits": [ { "sha": "<commit>", "agents": ["claude"],
+    "files": [ { "path": "a.test.ts", "status": "modified",
+      "hunks": [ { "oldStart": 3, "newStart": 3,
+        "removed": ["expect(a).toBe(2)"], "added": ["expect(a).toBeDefined()"] } ] } ] } ] }
+```
+
+The server scans the range for secrets like the snapshot. If it refuses
+the upload with `secret.unmasked` naming `.sloptopop/history/commits.json`,
+a secret is still in an older commit: revoke it, and run with
+`--no-history` meanwhile. A server older than the commit range refuses
+the `history` member (`request.invalid`); `--no-history` works with it.
+
 ## Waiting in the queue
 
 `check`, `fix` and `transform` share one exchange with the server
