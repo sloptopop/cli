@@ -1010,6 +1010,13 @@ own fix mode (`--fix`, `--write`), and never changes a fix: not its extent,
 its order, its text or its alternatives. It only translates where the
 fix is.
 
+**For a server that runs the tool itself.** The library exposes the same
+conversion as `sloptopop_cli::carrier::carry` for the four formats a server
+re-runs from source alone (`ruff-json`, `eslint-json`, `biome-rdjson`,
+`semgrep-json`): the tool's own output and the checkout it ran on in, the
+SARIF `collect` would write out. A server that re-runs a tool to check a
+fix compares like with like.
+
 **The carrier.** A kept fix is a SARIF `fixes` entry (SARIF 2.1.0 §3.55–§3.57)
 whose regions are **byte offsets only** (`byteOffset`, `byteLength`, §3.30.3)
 into the file as committed, byte order mark included:

@@ -41,8 +41,9 @@
 //! 5. `collect_command`
 //! 6. `cli`
 //! 7. this file: declares the modules and re-exports the public API
-//!    (`engine`, `protocol` and `render` gather items from the layers
-//!    below; `cli`, `framing`, `schema` and `server` are public as they are).
+//!    (`carrier`, `engine`, `protocol` and `render` gather items from the
+//!    layers below; `cli`, `framing`, `schema` and `server` are public as
+//!    they are).
 //!
 //! Standards: SCF TDA-08 (Technical Documentation Artifacts: the module
 //! layers above). Each module states its own controls; every item
@@ -86,6 +87,13 @@ pub mod server;
 mod server_command;
 mod session;
 mod transform_command;
+
+/// The SARIF carrier of analyzer fixes, for a server that runs an analyzer
+/// itself: the tool's own output converted exactly as `collect` converts
+/// it (see `docs/collect.md`, "Fixes").
+pub mod carrier {
+    pub use crate::collect_convert::{Carrier, carry};
+}
 
 /// Running `sloptopop-local`, the open-source half of sloptopop on this
 /// machine.

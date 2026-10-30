@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 
-use crate::collect_convert::{Converter, convert};
+use crate::collect_convert::{Carrier, Converter, carry, convert};
 use crate::tests::support::TempDir;
 
 fn probe(dir: &str) -> PathBuf {
@@ -597,4 +597,57 @@ fn opengrep_severities_and_unconvertible_offsets() {
         ]
     );
     assert!(convert(Converter::SemgrepJson, b"{}", "opengrep", "v", &root.0).is_err());
+}
+
+#[test]
+fn the_public_carrier_converts_as_collect_does() {
+    for (name, format, converter, raw_name, dir, tool, version) in [
+        (
+            "ruff-json",
+            Carrier::RuffJson,
+            Converter::RuffJson,
+            "ruff.json",
+            "py",
+            "ruff",
+            "0.17.1-1",
+        ),
+        (
+            "eslint-json",
+            Carrier::EslintJson,
+            Converter::EslintJson,
+            "eslint.json",
+            "js",
+            "eslint-typescript",
+            "8.71.2-1",
+        ),
+        (
+            "biome-rdjson",
+            Carrier::BiomeRdjson,
+            Converter::BiomeRdjson,
+            "biome.rdjson",
+            "js",
+            "biome",
+            "2.5.15-1",
+        ),
+        (
+            "semgrep-json",
+            Carrier::SemgrepJson,
+            Converter::SemgrepJson,
+            "opengrep.json",
+            "js",
+            "opengrep",
+            "1.31.0-1",
+        ),
+    ] {
+        assert_eq!(Carrier::from_name(name), Some(format), "{name}");
+        let root = probe(dir);
+        let carried = carry(format, &raw(raw_name), tool, version, &root).unwrap();
+        assert_eq!(
+            carried,
+            convert(converter, &raw(raw_name), tool, version, &root).unwrap(),
+            "{name}: the same SARIF"
+        );
+        assert!(!results(&document(&carried)).is_empty(), "{name}: findings");
+    }
+    assert_eq!(Carrier::from_name("ruff-sarif"), None, "an unknown format");
 }

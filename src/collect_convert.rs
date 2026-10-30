@@ -74,6 +74,64 @@ pub(crate) enum Converter {
     RustcJson,
 }
 
+/// A tool format whose fixes the carrier keeps, for a server that runs the
+/// tool itself and needs the same SARIF `collect` writes (WP-21: the
+/// server's re-runs of Ruff, `ESLint`, Biome and Opengrep or Semgrep).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Carrier {
+    /// Ruff's JSON (`--output-format json`).
+    RuffJson,
+    /// `ESLint`'s `json-with-metadata`.
+    EslintJson,
+    /// Biome's rdjson (`--reporter=rdjson`).
+    BiomeRdjson,
+    /// Opengrep's or Semgrep's JSON (`--json`).
+    SemgrepJson,
+}
+
+impl Carrier {
+    /// The format named `name`: `ruff-json`, `eslint-json`, `biome-rdjson`
+    /// or `semgrep-json` (the carrier's `sloptopop/source` names).
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "ruff-json" => Some(Self::RuffJson),
+            "eslint-json" => Some(Self::EslintJson),
+            "biome-rdjson" => Some(Self::BiomeRdjson),
+            "semgrep-json" => Some(Self::SemgrepJson),
+            _ => None,
+        }
+    }
+
+    /// Its converter.
+    const fn converter(self) -> Converter {
+        match self {
+            Self::RuffJson => Converter::RuffJson,
+            Self::EslintJson => Converter::EslintJson,
+            Self::BiomeRdjson => Converter::BiomeRdjson,
+            Self::SemgrepJson => Converter::SemgrepJson,
+        }
+    }
+}
+
+/// Converts `raw`, the output of `tool` at `version` in `format` on the
+/// checkout at `root` (mounted at `/src` when the tool ran), to the SARIF
+/// 2.1.0 report `collect` writes for it: the same findings, the same
+/// byte-region fixes and drop reasons, the same file digests.
+///
+/// # Errors
+///
+/// When `raw` is not readable output of that format.
+pub fn carry(
+    format: Carrier,
+    raw: &[u8],
+    tool: &str,
+    version: &str,
+    root: &Path,
+) -> Result<String, String> {
+    convert(format.converter(), raw, tool, version, root)
+}
+
 /// One SARIF result, ordered for a deterministic report.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Finding {
